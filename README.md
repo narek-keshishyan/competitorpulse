@@ -8,7 +8,7 @@ explain the change in plain English ("Price dropped from $39/mo to $29/mo").
 - **Frontend:** React 19 + Vite
 - **LLM:** any OpenAI-compatible Chat Completions API. Locally it uses the provided mock
   server, and the deployed instance uses a real provider (see [LLM](#llm)).
-- **Live demo:** see [Deployment](#deployment)
+- **Live demo:** https://competitorpulse.fly.dev (Fly.io + Supabase, real OpenAI summaries)
 
 ## Quick start (Docker)
 
@@ -183,10 +183,11 @@ The LLM call is deliberately not on the polling path:
    - **Fencing.** The claim bumps the attempt counter, and every later write requires that
      number. A worker whose lease ran out can never overwrite the result of the worker that
      took over.
-3. **Build the prompt.** It contains only the computed diff
-   (`price: "$39/mo" -> "$29/mo"`) and the product name. That keeps each billed request
-   small and stops the model from narrating unchanged fields. The model is told to treat the
-   listing text as untrusted data.
+3. **Build the prompt.** It leads with the computed diff (`price: "$39/mo" -> "$29/mo"`),
+   names the unchanged fields, and adds the current listing as context. Without that
+   context, small models were seen inventing values for fields they couldn't see. Temperature
+   is 0. The model is told to treat the listing text as untrusted data. The prompt carries a
+   version that is part of the cache key.
 4. **Call the model.** Each call has a hard timeout (`LLM_TIMEOUT_MS`, default 15 s). Errors
    are classified: timeouts, 429 and 5xx are retried with exponential backoff and jitter,
    while 400, 401 and 404 fail immediately because retrying won't help. After
@@ -258,7 +259,8 @@ All configuration comes from environment variables, validated at startup.
 
 ## Deployment
 
-The live instance runs on **Fly.io** with **Supabase Postgres**:
+The live instance at **https://competitorpulse.fly.dev** runs on **Fly.io** with
+**Supabase Postgres**:
 
 - **App.** One Fly machine runs the Docker image from this repo. It serves the API, the
   built React app and the background workers. It's always on (`auto_stop_machines = "off"`)

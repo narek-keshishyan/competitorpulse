@@ -60,7 +60,8 @@ export class OpenAiCompatibleClient implements LlmClient {
       completion = await this.client.chat.completions.create({
         model: this.options.model,
         messages,
-        temperature: 0.2,
+        // Deterministic wording: summaries should state facts, not vary between runs.
+        temperature: 0,
         max_tokens: this.options.maxTokens ?? 200,
       });
     } catch (err) {

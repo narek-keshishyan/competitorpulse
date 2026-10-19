@@ -16,7 +16,7 @@ describe('buildSummaryMessages', () => {
   it('sets the task and output constraints in the system message', () => {
     expect(system?.role).toBe('system');
     expect(system?.content).toMatch(/one short sentence/i);
-    expect(system?.content).toMatch(/never mention unchanged fields/i);
+    expect(system?.content).toMatch(/never mention a field that is not in the list/i);
     expect(system?.content).toMatch(/untrusted/i);
   });
 
@@ -29,8 +29,12 @@ describe('buildSummaryMessages', () => {
     ).toBe(true);
   });
 
-  it('sends only the changed fields and the product name', () => {
-    expect(user?.content).toContain('Product: "Acme CRM"');
-    expect(user?.content).not.toContain('Track leads and deals');
+  it('includes the current listing as context, but not the previous one', () => {
+    expect(user?.content).toContain(JSON.stringify(current, null, 2));
+    expect(user?.content).not.toContain(JSON.stringify(previous, null, 2));
+  });
+
+  it('names the unchanged fields so the model leaves them out', () => {
+    expect(user?.content).toContain('Unchanged (do not mention): title, description.');
   });
 });
