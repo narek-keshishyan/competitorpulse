@@ -9,17 +9,23 @@ pg.types.setTypeParser(pg.types.builtins.INT8, (value) => Number.parseInt(value,
 export interface DbOptions {
   url: string;
   ssl?: boolean;
+  sslCa?: string;
   poolMax?: number;
 }
 
 export type Db = Kysely<Database>;
 
-export function createDb({ url, ssl = false, poolMax = 10 }: DbOptions): Db {
+export function createDb({ url, ssl = false, sslCa, poolMax = 10 }: DbOptions): Db {
   const pool = new pg.Pool({
     connectionString: url,
     max: poolMax,
-    // Supabase's pooler presents a certificate that is not in Node's default CA bundle.
-    ssl: ssl ? { rejectUnauthorized: false } : undefined,
+    // Supabase signs its certificates with its own CA, which is not in Node's bundle.
+    // Verify against it when provided; otherwise encrypt without verifying.
+    ssl: ssl
+      ? sslCa
+        ? { ca: sslCa, rejectUnauthorized: true }
+        : { rejectUnauthorized: false }
+      : undefined,
   });
   return new Kysely<Database>({ dialect: new PostgresDialect({ pool }) });
 }

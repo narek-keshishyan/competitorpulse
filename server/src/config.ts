@@ -13,6 +13,9 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   // Hosted Postgres (e.g. Supabase) needs TLS; local docker Postgres does not.
   DATABASE_SSL: booleanFlag.default(false),
+  // PEM of the server's CA. When set, the certificate is verified; without it TLS still
+  // encrypts but does not authenticate the server.
+  DATABASE_SSL_CA: z.string().optional(),
   DATABASE_POOL_MAX: positiveInt.default(10),
 
   // Where the poller fetches listings from. Defaults to the stub served by this process.
@@ -64,6 +67,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     database: {
       url: e.DATABASE_URL,
       ssl: e.DATABASE_SSL,
+      sslCa: e.DATABASE_SSL_CA,
       poolMax: e.DATABASE_POOL_MAX,
     },
     listingSource: {
