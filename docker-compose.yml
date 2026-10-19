@@ -1,3 +1,5 @@
+# One-command local stack: Postgres, the mock LLM and the app.
+#   docker compose up --build   ->   http://localhost:3000
 services:
   db:
     image: postgres:17-alpine
@@ -15,6 +17,29 @@ services:
       interval: 2s
       timeout: 5s
       retries: 20
+
+  mock-llm:
+    build: ./mock-llm
+    ports:
+      - '4001:4001'
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      mock-llm:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/competitorpulse
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-30}
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://mock-llm:4001/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-not-needed-for-mock}
+      LLM_MODEL: ${LLM_MODEL:-mock-llm}
+    # Apply pending migrations, then start the API and background workers.
+    command: ['sh', '-c', 'node dist/scripts/migrate.js && exec node dist/main.js']
+    ports:
+      - '3000:3000'
 
 volumes:
   db-data:
