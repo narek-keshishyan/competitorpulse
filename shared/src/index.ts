@@ -6,6 +6,12 @@
 export interface Competitor {
   id: string;
   createdAt: string;
+  /** Scheduler state, so the UI can show when a competitor was and will be checked. */
+  lastPolledAt: string | null;
+  nextPollAt: string;
+  /** Fetch failures since the last successful poll; 0 when healthy. */
+  consecutiveFailures: number;
+  lastError: string | null;
 }
 
 export interface Listing {

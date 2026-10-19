@@ -88,14 +88,14 @@ GET    /api/competitors/:id/snapshots    -> 200 [Snapshot, ...]   newest first
 
 Additions beyond the contract:
 
-| Endpoint                         | Purpose                                                          |
-| -------------------------------- | ---------------------------------------------------------------- |
-| `createdAt` on competitors       | When tracking started.                                           |
-| `POST /api/competitors/:id/poll` | Makes a competitor due now (202). Used by the "Poll now" button. |
-| `GET .../snapshots?limit=N`      | Page size, default 100, max 500.                                 |
-| `GET /healthz`, `GET /readyz`    | Liveness (process up) and readiness (database reachable).        |
-| `GET /stub/listings[/:id]`       | The listing stub (see below).                                    |
-| `POST /stub/reset` `{ "id"? }`   | Rewinds the stub so a demo can be replayed from version 1.       |
+| Endpoint                         | Purpose                                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------ |
+| Scheduler fields on competitors  | `createdAt`, `lastPolledAt`, `nextPollAt`, `consecutiveFailures`, `lastError`. |
+| `POST /api/competitors/:id/poll` | Makes a competitor due now (202). Used by the "Poll now" button.               |
+| `GET .../snapshots?limit=N`      | Page size, default 100, max 500.                                               |
+| `GET /healthz`, `GET /readyz`    | Liveness (process up) and readiness (database reachable).                      |
+| `GET /stub/listings[/:id]`       | The listing stub (see below).                                                  |
+| `POST /stub/reset` `{ "id"? }`   | Rewinds the stub so a demo can be replayed from version 1.                     |
 
 Errors are JSON `{ "error": "<code>", "message": "..." }`. `POST /api/competitors` returns
 400 for a malformed id (lowercase letters, digits and dashes), 409 if it is already tracked,

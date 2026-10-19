@@ -7,7 +7,7 @@ import type {
   Snapshot,
 } from '@competitorpulse/shared';
 import type { Db } from '../db/connection.js';
-import type { SnapshotRow } from '../db/schema.js';
+import type { CompetitorRow, SnapshotRow } from '../db/schema.js';
 import type { ListingSource } from '../listing-source/http-source.js';
 import { sendError } from './errors.js';
 
@@ -25,6 +25,17 @@ const idParams = {
   required: ['id'],
   properties: { id: { type: 'string', pattern: COMPETITOR_ID_PATTERN } },
 } as const;
+
+function toCompetitor(row: CompetitorRow): Competitor {
+  return {
+    id: row.id,
+    createdAt: row.created_at.toISOString(),
+    lastPolledAt: row.last_polled_at?.toISOString() ?? null,
+    nextPollAt: row.next_poll_at.toISOString(),
+    consecutiveFailures: row.consecutive_failures,
+    lastError: row.last_error,
+  };
+}
 
 function toSnapshot(row: SnapshotRow): Snapshot {
   return {
@@ -52,11 +63,11 @@ export const competitorRoutes: FastifyPluginAsync<CompetitorRoutesOptions> = asy
   app.get('/competitors', async (): Promise<Competitor[]> => {
     const rows = await db
       .selectFrom('competitors')
-      .select(['id', 'created_at'])
+      .selectAll()
       .orderBy('created_at')
       .orderBy('id')
       .execute();
-    return rows.map((r) => ({ id: r.id, createdAt: r.created_at.toISOString() }));
+    return rows.map(toCompetitor);
   });
 
   // What can be tracked, so the UI can suggest ids instead of making people guess them.
@@ -109,15 +120,17 @@ export const competitorRoutes: FastifyPluginAsync<CompetitorRoutesOptions> = asy
         .insertInto('competitors')
         .values({ id })
         .onConflict((oc) => oc.column('id').doNothing())
-        .returning(['id', 'created_at'])
+        .returningAll()
         .executeTakeFirst();
       if (!created) {
         return sendError(reply, 409, 'conflict', `${id} is already tracked`);
       }
 
       onPollRequested?.();
-      const body: Competitor = { id: created.id, createdAt: created.created_at.toISOString() };
-      return reply.code(201).header('location', `/api/competitors/${id}`).send(body);
+      return reply
+        .code(201)
+        .header('location', `/api/competitors/${id}`)
+        .send(toCompetitor(created));
     },
   );
 

@@ -128,7 +128,31 @@ describe('competitors API', () => {
 
       expect(res.statusCode).toBe(200);
       expect(res.json().map((c: { id: string }) => c.id)).toEqual(['north-analytics', 'acme-crm']);
-      expect(res.json()[0]).toEqual({ id: 'north-analytics', createdAt: expect.any(String) });
+      expect(res.json()[0]).toEqual({
+        id: 'north-analytics',
+        createdAt: expect.any(String),
+        lastPolledAt: null,
+        nextPollAt: expect.any(String),
+        consecutiveFailures: 0,
+        lastError: null,
+      });
+    });
+
+    it('exposes the scheduler state of each competitor', async () => {
+      await track('acme-crm');
+      await recordSnapshot(db, 'acme-crm', v1, new Date('2026-09-10T12:00:00Z'));
+      await db
+        .updateTable('competitors')
+        .set({ consecutive_failures: 2, last_error: 'Listing source answered 503' })
+        .execute();
+
+      const res = await app.inject({ method: 'GET', url: '/api/competitors' });
+
+      expect(res.json()[0]).toMatchObject({
+        lastPolledAt: '2026-09-10T12:00:00.000Z',
+        consecutiveFailures: 2,
+        lastError: 'Listing source answered 503',
+      });
     });
 
     it('returns an empty list when nothing is tracked', async () => {
