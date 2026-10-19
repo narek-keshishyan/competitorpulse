@@ -236,6 +236,18 @@ describe('competitors API', () => {
     });
   });
 
+  it('names client errors after their status code', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/competitors',
+      headers: { 'content-type': 'application/xml' },
+      payload: '<id>acme-crm</id>',
+    });
+
+    expect(res.statusCode).toBe(415);
+    expect(res.json()).toMatchObject({ error: 'unsupported_media_type' });
+  });
+
   it('answers unknown API routes with a JSON 404', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/nope' });
 

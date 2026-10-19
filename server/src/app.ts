@@ -3,6 +3,7 @@ import Fastify, {
   type FastifyInstance,
   type FastifyServerOptions,
 } from 'fastify';
+import { STATUS_CODES } from 'node:http';
 import fastifyStatic from '@fastify/static';
 import type { Db } from './db/connection.js';
 import type { ListingSource } from './listing-source/http-source.js';
@@ -30,7 +31,11 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return sendError(reply, 400, 'bad_request', error.message);
     }
     if (error.statusCode && error.statusCode < 500) {
-      return sendError(reply, error.statusCode, 'bad_request', error.message);
+      // e.g. 413 -> "payload_too_large", 415 -> "unsupported_media_type"
+      const code = (STATUS_CODES[error.statusCode] ?? 'bad_request')
+        .toLowerCase()
+        .replace(/\W+/g, '_');
+      return sendError(reply, error.statusCode, code, error.message);
     }
     request.log.error({ err: error }, 'unhandled error');
     return sendError(reply, 500, 'internal_error', 'Something went wrong');
