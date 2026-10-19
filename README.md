@@ -10,6 +10,21 @@ explain the change in plain English ("Price dropped from $39/mo to $29/mo").
   server, and the deployed instance uses a real provider (see [LLM](#llm)).
 - **Live demo:** https://competitorpulse.fly.dev (Fly.io + Supabase, real OpenAI summaries)
 
+## Try the live demo
+
+1. Open https://competitorpulse.fly.dev.
+2. Type `a` in the input, pick `acme-crm` (or `north-analytics` / `ferry-pay`), and click
+   **Track**.
+3. Open the competitor. Every minute the scheduler fetches the next listing version. To
+   step through faster, click **Poll now** (it's limited to once every 10 s per competitor
+   and counts down in between).
+4. After three changes you'll have four snapshots: three with an AI summary and the
+   changed fields highlighted, and the first one marked "No change since previous
+   snapshot".
+
+The live instance uses a real model (OpenAI). To see the failure handling with injected
+LLM errors and latency, run it locally with the mock server (below).
+
 ## Quick start (Docker)
 
 ```bash
@@ -105,7 +120,7 @@ Additions beyond the contract:
 | -------------------------------- | ------------------------------------------------------------------------------ |
 | `GET /api/catalog`               | Every id the listing source knows, flagged `tracked`. Powers the suggestions.  |
 | Scheduler fields on competitors  | `createdAt`, `lastPolledAt`, `nextPollAt`, `consecutiveFailures`, `lastError`. |
-| `POST /api/competitors/:id/poll` | Makes a competitor due now (202). Used by the "Poll now" button.               |
+| `POST /api/competitors/:id/poll` | Makes a competitor due now (202). Limited per competitor; see below.           |
 | `GET .../snapshots?limit=N`      | Page size, default 100, max 500.                                               |
 | `GET /healthz`, `GET /readyz`    | Liveness (process up) and readiness (database reachable).                      |
 | `GET /stub/listings[/:id]`       | The listing stub (see below).                                                  |
@@ -213,6 +228,30 @@ The result is that a slow or failing LLM can delay a summary but never blocks po
 never loses a snapshot, and never touches the snapshot's data. An unchanged poll makes no
 LLM call at all, which you can check with the mock server's `GET /control/stats`.
 
+### Abuse protection
+
+The demo is public and unauthenticated (per the brief), so every public action is bounded,
+without getting in the way of a person clicking around:
+
+- **"Poll now" cooldown, per competitor.**
+  - **Why:** each accepted request makes the poller write a snapshot, so an unlimited loop
+    could fill the database within hours.
+  - **How:** the check and the claim are a single `UPDATE … WHERE last_manual_poll_at <=
+now() - cooldown`. Concurrent requests from any client or instance therefore let
+    exactly one through per window (10 s by default). The others get
+    `429 Too Many Requests` with `Retry-After`, and the UI shows a countdown.
+- **Per-client rate limit on `/api`.**
+  - **Limits:** 120 requests/min, and 20/min per endpoint that changes data.
+  - **Client identity:** the real client IP comes from Fly's `Fly-Client-IP` header.
+  - **Not limited:** health probes, the stub (called by our own poller) and static assets.
+- **Request size and headers.** Bodies over 16 KB are refused. Helmet adds CSP, HSTS,
+  `nosniff` and frame protection.
+- **LLM spend is bounded by design.**
+  - **No user text reaches the model:** only diffs between the fixed fixture versions
+    do.
+  - **Cached transitions:** every transition is cached per model and prompt version, so
+    replaying the demo (`/stub/reset`, re-tracking) never pays twice.
+
 ### Listing source stub
 
 `server/fixtures/listings.json` is served by an in-process stub at `/stub/listings/:id`. Each call
@@ -237,7 +276,8 @@ A small React app with two views, served by the API in production:
     snapshot can also show "Summarizing…", "summary could not be generated" or "No change
     since previous snapshot."
   - **Highlighting:** fields that changed are highlighted.
-  - **Freshness:** the page refreshes every 5 s, and **Poll now** fetches immediately.
+  - **Freshness:** the page refreshes every 5 s, and **Poll now** fetches immediately. The
+    button then counts down until the server accepts another request.
 
 ## LLM
 
@@ -267,28 +307,30 @@ once the mock recovers.
 
 All configuration comes from environment variables, validated at startup.
 
-| Variable                                         | Default                                        | Notes                                                  |
-| ------------------------------------------------ | ---------------------------------------------- | ------------------------------------------------------ |
-| `DATABASE_URL`                                   | (required)                                     | Postgres connection string                             |
-| `DATABASE_SSL`                                   | `false`                                        | `true` for hosted Postgres (Supabase)                  |
-| `DATABASE_SSL_CA`                                |                                                | PEM of the server CA; enables certificate verification |
-| `DATABASE_POOL_MAX`                              | `10`                                           |                                                        |
-| `HOST` / `PORT`                                  | `0.0.0.0` / `3000`                             |                                                        |
-| `LOG_LEVEL`                                      | `info`                                         |                                                        |
-| `POLL_INTERVAL_SECONDS`                          | `60`                                           | Per-competitor polling interval                        |
-| `POLL_TICK_MS`                                   | `5000`                                         | How often the poller looks for due competitors         |
-| `POLL_BATCH_SIZE` / `POLL_CONCURRENCY`           | `50` / `10`                                    |                                                        |
-| `LISTING_SOURCE_URL`                             | `http://127.0.0.1:$PORT/stub`                  |                                                        |
-| `LISTING_FETCH_TIMEOUT_MS`                       | `5000`                                         |                                                        |
-| `ENABLE_STUB` / `LISTING_FIXTURES_PATH`          | `true` / `server/fixtures/listings.json`       | The fixture-backed stub                                |
-| `WORKERS_ENABLED`                                | `true`                                         | `false` for API-only replicas                          |
-| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`     | OpenAI / (required for OpenAI) / `gpt-4o-mini` | See [LLM](#llm). Docker compose uses the mock.         |
-| `LLM_TIMEOUT_MS`                                 | `15000`                                        |                                                        |
-| `LLM_MAX_ATTEMPTS`                               | `5`                                            |                                                        |
-| `LLM_CONCURRENCY`                                | `4`                                            | Parallel LLM calls (and jobs claimed per run)          |
-| `SUMMARY_TICK_MS`                                | `3000`                                         | How often the summary worker looks for pending jobs    |
-| `SUMMARY_RETRY_BASE_MS` / `SUMMARY_RETRY_MAX_MS` | `5000` / `300000`                              | Retry backoff                                          |
-| `WEB_DIST_DIR`                                   |                                                | Built web app to serve (set in the Docker image)       |
+| Variable                                                 | Default                                        | Notes                                                                         |
+| -------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| `DATABASE_URL`                                           | (required)                                     | Postgres connection string                                                    |
+| `DATABASE_SSL`                                           | `false`                                        | `true` for hosted Postgres (Supabase)                                         |
+| `DATABASE_SSL_CA`                                        |                                                | PEM of the server CA; enables certificate verification                        |
+| `DATABASE_POOL_MAX`                                      | `10`                                           |                                                                               |
+| `HOST` / `PORT`                                          | `0.0.0.0` / `3000`                             |                                                                               |
+| `LOG_LEVEL`                                              | `info`                                         |                                                                               |
+| `POLL_INTERVAL_SECONDS`                                  | `60`                                           | Per-competitor polling interval                                               |
+| `POLL_TICK_MS`                                           | `5000`                                         | How often the poller looks for due competitors                                |
+| `MANUAL_POLL_COOLDOWN_SECONDS`                           | `10`                                           | Minimum time between two accepted "Poll now" requests per competitor          |
+| `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_WRITES_PER_MINUTE` | `120` / `20`                                   | Per-client limits for `/api`; `RATE_LIMIT_PER_MINUTE=0` turns the limiter off |
+| `POLL_BATCH_SIZE` / `POLL_CONCURRENCY`                   | `50` / `10`                                    |                                                                               |
+| `LISTING_SOURCE_URL`                                     | `http://127.0.0.1:$PORT/stub`                  |                                                                               |
+| `LISTING_FETCH_TIMEOUT_MS`                               | `5000`                                         |                                                                               |
+| `ENABLE_STUB` / `LISTING_FIXTURES_PATH`                  | `true` / `server/fixtures/listings.json`       | The fixture-backed stub                                                       |
+| `WORKERS_ENABLED`                                        | `true`                                         | `false` for API-only replicas                                                 |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`             | OpenAI / (required for OpenAI) / `gpt-4o-mini` | See [LLM](#llm). Docker compose uses the mock.                                |
+| `LLM_TIMEOUT_MS`                                         | `15000`                                        |                                                                               |
+| `LLM_MAX_ATTEMPTS`                                       | `5`                                            |                                                                               |
+| `LLM_CONCURRENCY`                                        | `4`                                            | Parallel LLM calls (and jobs claimed per run)                                 |
+| `SUMMARY_TICK_MS`                                        | `3000`                                         | How often the summary worker looks for pending jobs                           |
+| `SUMMARY_RETRY_BASE_MS` / `SUMMARY_RETRY_MAX_MS`         | `5000` / `300000`                              | Retry backoff                                                                 |
+| `WEB_DIST_DIR`                                           |                                                | Built web app to serve (set in the Docker image)                              |
 
 ## Deployment
 
@@ -333,7 +375,8 @@ fly deploy -a <app-name> --ha=false
 - **The summary cache can miss within a batch.** Two identical transitions summarized in the
   same batch may both call the LLM. The cache prevents repeats across batches, which covers
   the realistic case.
-- **No auth**, per the brief: a single internal user. This includes the stub's
+- **No auth**, per the brief: a single internal user. Instead, every public action is
+  bounded (see [Abuse protection](#abuse-protection)). This includes the stub's
   `/stub/reset`, which is reachable on the demo deployment on purpose so a demo can be
   replayed. `ENABLE_STUB=false` removes it.
 
