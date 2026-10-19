@@ -154,6 +154,26 @@ describe('Poller', () => {
     expect(wait).toBeLessThan(901);
   });
 
+  it('keeps backing off after very many consecutive failures', async () => {
+    await db
+      .insertInto('competitors')
+      .values({ id: 'gone', consecutive_failures: 5_000 })
+      .execute();
+    const poller = makePoller(
+      fakeSource(async () => {
+        throw new ListingNotFoundError('No listing found for gone');
+      }),
+    );
+
+    await poller.runOnce();
+
+    const row = await db
+      .selectFrom('competitors')
+      .select('consecutive_failures')
+      .executeTakeFirstOrThrow();
+    expect(row.consecutive_failures).toBe(5_001);
+  });
+
   it('tolerates a competitor being removed while its listing is being fetched', async () => {
     await db.insertInto('competitors').values({ id: 'acme' }).execute();
     const poller = makePoller(

@@ -70,8 +70,10 @@ export class Poller {
 
     const result: PollRunResult = { claimed: ids.length, recorded: 0, failed: 0 };
     for (const outcome of outcomes) {
-      if (outcome.status === 'rejected') result.failed += 1;
-      else if (outcome.value === 'recorded') result.recorded += 1;
+      if (outcome.status === 'rejected') {
+        result.failed += 1;
+        this.options.log.error({ err: outcome.reason }, 'poll crashed');
+      } else if (outcome.value === 'recorded') result.recorded += 1;
       else if (outcome.value === 'failed') result.failed += 1;
     }
     if (ids.length > 0) this.options.log.info(result, 'poll run finished');
@@ -114,7 +116,7 @@ export class Poller {
         last_error: message,
         next_poll_at: sql<Date>`now() + make_interval(secs => least(
           ${intervalSeconds}::float8,
-          ${this.failureBaseSeconds}::float8 * power(2, consecutive_failures)
+          ${this.failureBaseSeconds}::float8 * power(2, least(consecutive_failures, 20))
         ))`,
       }))
       .where('id', '=', id)
