@@ -22,6 +22,7 @@ const app = await buildApp({
   webDistDir: config.webDistDir,
   onPollRequested: () => pollLoop?.wake(),
   manualPollCooldownSeconds: config.polling.manualCooldownSeconds,
+  rateLimit: config.rateLimit,
   logger: { level: config.logLevel },
 });
 

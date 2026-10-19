@@ -29,6 +29,10 @@ const envSchema = z
       .string()
       .default(fileURLToPath(new URL('../fixtures/listings.json', import.meta.url))),
 
+    // Per-client limits for /api (requests per minute). 0 turns the limiter off.
+    RATE_LIMIT_PER_MINUTE: z.coerce.number().int().nonnegative().default(120),
+    RATE_LIMIT_WRITES_PER_MINUTE: positiveInt.default(20),
+
     // Lets you run API-only replicas while a separate deployment runs the background loops.
     WORKERS_ENABLED: booleanFlag.default(true),
 
@@ -90,6 +94,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       fixturesPath: e.LISTING_FIXTURES_PATH,
     },
     workersEnabled: e.WORKERS_ENABLED,
+    rateLimit:
+      e.RATE_LIMIT_PER_MINUTE > 0
+        ? { perMinute: e.RATE_LIMIT_PER_MINUTE, writesPerMinute: e.RATE_LIMIT_WRITES_PER_MINUTE }
+        : undefined,
     polling: {
       intervalSeconds: e.POLL_INTERVAL_SECONDS,
       tickMs: e.POLL_TICK_MS,

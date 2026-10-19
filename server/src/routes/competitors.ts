@@ -19,6 +19,8 @@ export interface CompetitorRoutesOptions {
   onPollRequested?: () => void;
   /** Minimum seconds between two accepted "Poll now" requests per competitor. */
   manualPollCooldownSeconds: number;
+  /** Stricter per-client limit for endpoints that change data (needs the rate limiter). */
+  writesPerMinute?: number;
 }
 
 const COMPETITOR_ID_PATTERN = '^[a-z0-9][a-z0-9-]{0,62}$';
@@ -57,8 +59,12 @@ function toSnapshot(row: SnapshotRow): Snapshot {
 
 export const competitorRoutes: FastifyPluginAsync<CompetitorRoutesOptions> = async (
   app,
-  { db, listingSource, onPollRequested, manualPollCooldownSeconds },
+  { db, listingSource, onPollRequested, manualPollCooldownSeconds, writesPerMinute },
 ) => {
+  const writeLimit = writesPerMinute
+    ? { rateLimit: { max: writesPerMinute, timeWindow: '1 minute' } }
+    : {};
+
   const cooldown = sql<Date>`make_interval(secs => ${manualPollCooldownSeconds}::float8)`;
 
   const exists = async (id: string) =>
@@ -94,6 +100,7 @@ export const competitorRoutes: FastifyPluginAsync<CompetitorRoutesOptions> = asy
   app.post<{ Body: CreateCompetitorRequest }>(
     '/competitors',
     {
+      config: writeLimit,
       schema: {
         body: {
           type: 'object',
@@ -141,7 +148,7 @@ export const competitorRoutes: FastifyPluginAsync<CompetitorRoutesOptions> = asy
 
   app.delete<{ Params: { id: string } }>(
     '/competitors/:id',
-    { schema: { params: idParams } },
+    { config: writeLimit, schema: { params: idParams } },
     async (request, reply) => {
       const deleted = await db
         .deleteFrom('competitors')
@@ -184,7 +191,7 @@ export const competitorRoutes: FastifyPluginAsync<CompetitorRoutesOptions> = asy
 
   app.post<{ Params: { id: string } }>(
     '/competitors/:id/poll',
-    { schema: { params: idParams } },
+    { config: writeLimit, schema: { params: idParams } },
     async (request, reply) => {
       const { id } = request.params;
       // Check and claim in one statement: concurrent requests are serialized on the row, so
