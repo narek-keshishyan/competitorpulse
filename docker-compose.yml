@@ -38,6 +38,7 @@ services:
       LLM_MODEL: ${LLM_MODEL:-mock-llm}
     # Apply pending migrations, then start the API and background workers.
     command: ['sh', '-c', 'node dist/scripts/migrate.js && exec node dist/main.js']
+    stop_grace_period: 60s
     ports:
       - '3000:3000'
 

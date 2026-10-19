@@ -2,6 +2,9 @@
 # Secrets (not in this file): DATABASE_URL, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL.
 app = 'competitorpulse'
 primary_region = 'iad'
+# Room for in-flight polls and LLM calls to finish on deploy (the default is 5s).
+kill_signal = 'SIGTERM'
+kill_timeout = '60s'
 
 [build]
   dockerfile = 'Dockerfile'
