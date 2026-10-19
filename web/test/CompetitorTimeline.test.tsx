@@ -65,6 +65,29 @@ describe('CompetitorTimeline', () => {
     expect(cards[3]).toHaveTextContent('Acme CRM — Simple CRM for small teams');
   });
 
+  it('highlights the fields that changed since the previous snapshot', async () => {
+    mockFetch({
+      'GET /api/competitors/acme-crm/snapshots': () => ({
+        body: [
+          {
+            ...base,
+            id: 2,
+            price: '$29/mo',
+            changed: true,
+            changedFields: ['price'],
+            summaryStatus: 'pending',
+          },
+        ],
+      }),
+    });
+
+    renderTimeline();
+
+    const card = await screen.findByRole('article');
+    const highlighted = [...card.querySelectorAll('mark.changed')].map((m) => m.textContent);
+    expect(highlighted).toEqual(['$29/mo']);
+  });
+
   it('explains when the competitor is not tracked', async () => {
     mockFetch({
       'GET /api/competitors/acme-crm/snapshots': () => ({

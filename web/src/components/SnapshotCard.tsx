@@ -1,4 +1,5 @@
-import type { Snapshot } from '@competitorpulse/shared';
+import type { ReactNode } from 'react';
+import type { ListingField, Snapshot } from '@competitorpulse/shared';
 
 function SummaryLine({ snapshot }: { snapshot: Snapshot }) {
   switch (snapshot.summaryStatus) {
@@ -17,6 +18,25 @@ function SummaryLine({ snapshot }: { snapshot: Snapshot }) {
   }
 }
 
+/** Highlights a listing field that differs from the previous snapshot. */
+function Field({
+  snapshot,
+  name,
+  children,
+}: {
+  snapshot: Snapshot;
+  name: ListingField;
+  children: ReactNode;
+}) {
+  return snapshot.changedFields.includes(name) ? (
+    <mark className="changed" title={`${name} changed`}>
+      {children}
+    </mark>
+  ) : (
+    <>{children}</>
+  );
+}
+
 export function SnapshotCard({ snapshot }: { snapshot: Snapshot }) {
   return (
     <article className={`snapshot${snapshot.changed ? ' snapshot--changed' : ''}`}>
@@ -24,10 +44,24 @@ export function SnapshotCard({ snapshot }: { snapshot: Snapshot }) {
         {new Date(snapshot.fetchedAt).toLocaleString()}
       </time>
       <div>
-        <strong>{snapshot.title}</strong> — {snapshot.tagline}
+        <Field snapshot={snapshot} name="title">
+          <strong>{snapshot.title}</strong>
+        </Field>{' '}
+        —{' '}
+        <Field snapshot={snapshot} name="tagline">
+          {snapshot.tagline}
+        </Field>
       </div>
-      <div>{snapshot.price}</div>
-      <div>{snapshot.description}</div>
+      <div>
+        <Field snapshot={snapshot} name="price">
+          {snapshot.price}
+        </Field>
+      </div>
+      <div>
+        <Field snapshot={snapshot} name="description">
+          {snapshot.description}
+        </Field>
+      </div>
       <SummaryLine snapshot={snapshot} />
     </article>
   );
