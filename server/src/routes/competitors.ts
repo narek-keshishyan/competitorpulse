@@ -6,6 +6,7 @@ import type {
   Competitor,
   CreateCompetitorRequest,
   Snapshot,
+  TimelineEntry,
 } from '@competitorpulse/shared';
 import type { Db } from '../db/connection.js';
 import type { CompetitorRow, SnapshotRow } from '../db/schema.js';
@@ -186,6 +187,53 @@ export const competitorRoutes: FastifyPluginAsync<CompetitorRoutesOptions> = asy
         .limit(request.query.limit)
         .execute();
       return rows.map(toSnapshot);
+    },
+  );
+
+  app.get<{ Params: { id: string }; Querystring: { limit: number } }>(
+    '/competitors/:id/timeline',
+    {
+      schema: {
+        params: idParams,
+        querystring: {
+          type: 'object',
+          properties: { limit: { type: 'integer', minimum: 1, maximum: 500, default: 100 } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      if (!(await exists(id))) {
+        return sendError(reply, 404, 'not_found', `${id} is not tracked`);
+      }
+      // "Gaps and islands": a running count of changed snapshots numbers the groups, so
+      // every change starts a new group (the first snapshot starts group 0) and the
+      // unchanged checks that follow it fall into the same group.
+      const { rows } = await sql<SnapshotRow & { unchanged_checks: number; last_checked_at: Date }>`
+        with numbered as (
+          select id, fetched_at,
+                 count(*) filter (where changed) over (order by fetched_at, id) as grp
+          from snapshots
+          where competitor_id = ${id}
+        ),
+        groups as (
+          select (array_agg(id order by fetched_at, id))[1] as head_id,
+                 count(*)::int - 1 as unchanged_checks,
+                 max(fetched_at) as last_checked_at
+          from numbered
+          group by grp
+        )
+        select s.*, g.unchanged_checks, g.last_checked_at
+        from groups g
+        join snapshots s on s.id = g.head_id
+        order by s.fetched_at desc, s.id desc
+        limit ${request.query.limit}
+      `.execute(db);
+      return rows.map((row): TimelineEntry => ({
+        snapshot: toSnapshot(row),
+        unchangedChecks: row.unchanged_checks,
+        lastCheckedAt: row.last_checked_at.toISOString(),
+      }));
     },
   );
 

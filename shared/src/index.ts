@@ -48,6 +48,17 @@ export interface CatalogEntry {
   tracked: boolean;
 }
 
+/**
+ * One step of a competitor's history: a snapshot that changed something (or the very first
+ * snapshot), followed by `unchangedChecks` polls that found the same listing, the latest
+ * of them at `lastCheckedAt`. Keeps long stretches of "no change" from burying the changes.
+ */
+export interface TimelineEntry {
+  snapshot: Snapshot;
+  unchangedChecks: number;
+  lastCheckedAt: string;
+}
+
 export interface CreateCompetitorRequest {
   id: string;
 }

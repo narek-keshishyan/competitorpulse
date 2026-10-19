@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import type { Listing } from '@competitorpulse/shared';
+import type { Listing, TimelineEntry } from '@competitorpulse/shared';
 import type { Db } from '../src/db/connection.js';
 import { ListingSourceError } from '../src/listing-source/http-source.js';
 import { recordSnapshot } from '../src/polling/snapshot-repo.js';
@@ -256,6 +256,80 @@ describe('competitors API', () => {
 
       expect(res.statusCode).toBe(404);
       expect(res.json()).toMatchObject({ error: 'not_found' });
+    });
+  });
+
+  describe('GET /api/competitors/:id/timeline', () => {
+    it('groups each change with the unchanged checks that followed it, newest first', async () => {
+      await track('acme-crm');
+      const at = (minute: number) => new Date(Date.UTC(2026, 8, 10, 12, minute));
+      const v2 = { ...v1, price: '$39/mo' };
+      const v3 = { ...v2, tagline: 'The CRM small teams love' };
+      for (const [minute, listing] of [
+        [0, v1],
+        [1, v1],
+        [2, v1],
+        [3, v2],
+        [4, v2],
+        [5, v3],
+      ] as const) {
+        await recordSnapshot(db, 'acme-crm', listing, at(minute));
+      }
+
+      const res = await app.inject({ method: 'GET', url: '/api/competitors/acme-crm/timeline' });
+
+      expect(res.statusCode).toBe(200);
+      const entries = res.json() as TimelineEntry[];
+      expect(
+        entries.map((e) => [
+          e.snapshot.fetchedAt,
+          e.snapshot.changedFields,
+          e.unchangedChecks,
+          e.lastCheckedAt,
+        ]),
+      ).toEqual([
+        [at(5).toISOString(), ['tagline'], 0, at(5).toISOString()],
+        [at(3).toISOString(), ['price'], 1, at(4).toISOString()],
+        [at(0).toISOString(), [], 2, at(2).toISOString()],
+      ]);
+      expect(entries[1]?.snapshot).toMatchObject({ price: '$39/mo', changed: true });
+    });
+
+    it('keeps changes visible no matter how many unchanged checks follow', async () => {
+      await track('acme-crm');
+      await recordSnapshot(db, 'acme-crm', v1, new Date(Date.UTC(2026, 8, 10, 12, 0)));
+      await recordSnapshot(
+        db,
+        'acme-crm',
+        { ...v1, price: '$39/mo' },
+        new Date(Date.UTC(2026, 8, 10, 12, 1)),
+      );
+      for (let i = 2; i < 152; i++) {
+        await recordSnapshot(
+          db,
+          'acme-crm',
+          { ...v1, price: '$39/mo' },
+          new Date(Date.UTC(2026, 8, 10, 12, i)),
+        );
+      }
+
+      const res = await app.inject({ method: 'GET', url: '/api/competitors/acme-crm/timeline' });
+
+      expect(res.json().map((e: TimelineEntry) => e.unchangedChecks)).toEqual([150, 0]);
+    });
+
+    it('returns an empty timeline before the first poll', async () => {
+      await track('acme-crm');
+
+      const res = await app.inject({ method: 'GET', url: '/api/competitors/acme-crm/timeline' });
+
+      expect(res.json()).toEqual([]);
+    });
+
+    it('answers 404 for a competitor that is not tracked', async () => {
+      const res = await app.inject({ method: 'GET', url: '/api/competitors/nope/timeline' });
+
+      expect(res.statusCode).toBe(404);
     });
   });
 
