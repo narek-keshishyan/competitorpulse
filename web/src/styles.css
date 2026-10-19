@@ -67,8 +67,46 @@ button:disabled {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   padding: 10px 0;
   border-bottom: 1px solid #e5e5e5;
+}
+
+.competitor-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 0.875rem;
+  margin-top: 2px;
+}
+
+.badge {
+  border-radius: 4px;
+  padding: 0 6px;
+}
+
+.badge--error {
+  background: #fde7ea;
+  color: #b00020;
+}
+
+.confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+
+button.danger {
+  border-color: #b00020;
+  background: #b00020;
+  color: #fff;
+}
+
+mark.changed {
+  background: #fff3bf;
+  color: inherit;
+  padding: 0 2px;
 }
 
 .toolbar {

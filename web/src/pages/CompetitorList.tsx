@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
 import type { CatalogEntry, Competitor } from '@competitorpulse/shared';
 import { api } from '../api';
+import { CompetitorRow } from '../components/CompetitorRow';
+
+/** Keeps the scheduler status of each competitor current. */
+const REFRESH_INTERVAL_MS = 10_000;
 
 export function CompetitorList() {
   const [competitors, setCompetitors] = useState<Competitor[] | null>(null);
@@ -9,6 +12,7 @@ export function CompetitorList() {
   const [newId, setNewId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   const refresh = useCallback(async () => {
     try {
@@ -29,8 +33,17 @@ export function CompetitorList() {
       (entries) => !cancelled && setCatalog(entries),
       () => {},
     );
+    const refreshTimer = setInterval(() => {
+      api.listCompetitors().then(
+        (list) => !cancelled && setCompetitors(list),
+        () => {},
+      );
+    }, REFRESH_INTERVAL_MS);
+    const clockTimer = setInterval(() => setNow(Date.now()), 1_000);
     return () => {
       cancelled = true;
+      clearInterval(refreshTimer);
+      clearInterval(clockTimer);
     };
   }, []);
 
@@ -103,12 +116,7 @@ export function CompetitorList() {
       ) : (
         <ul className="competitor-list">
           {competitors.map((c) => (
-            <li key={c.id}>
-              <Link to={`/competitors/${encodeURIComponent(c.id)}`}>{c.id}</Link>
-              <button type="button" onClick={() => void remove(c.id)} aria-label={`Remove ${c.id}`}>
-                Remove
-              </button>
-            </li>
+            <CompetitorRow key={c.id} competitor={c} now={now} onRemove={remove} />
           ))}
         </ul>
       )}
