@@ -1,5 +1,6 @@
 import { Link, Route, Routes } from 'react-router-dom';
 import { CompetitorList } from './pages/CompetitorList';
+import { CompetitorTimeline } from './pages/CompetitorTimeline';
 
 export function App() {
   return (
@@ -11,6 +12,7 @@ export function App() {
       </h1>
       <Routes>
         <Route path="/" element={<CompetitorList />} />
+        <Route path="/competitors/:id" element={<CompetitorTimeline />} />
         <Route path="*" element={<p>Page not found.</p>} />
       </Routes>
     </main>
