@@ -13,14 +13,14 @@ explain the change in plain English ("Price dropped from $39/mo to $29/mo").
 ## Try the live demo
 
 1. Open https://competitorpulse.fly.dev.
-2. Type `a` in the input, pick `acme-crm` (or `north-analytics` / `ferry-pay`), and click
-   **Track**.
-3. Open the competitor. Every minute the scheduler fetches the next listing version. To
-   step through faster, click **Poll now** (it's limited to once every 10 s per competitor
-   and counts down in between).
-4. After three changes you'll have four snapshots: three with an AI summary and the
-   changed fields highlighted, and the first one marked "No change since previous
-   snapshot".
+2. `acme-crm` and `ferry-pay` are already tracked: open one to see a full history of four
+   snapshots, three of them with an AI summary and the changed fields highlighted.
+3. To watch it happen, type `n` in the input, pick `north-analytics`, and click **Track**.
+   Open it: the first snapshot appears within seconds.
+4. The scheduler checks every competitor every 15 minutes, the production setting from the
+   brief. To step through the versions now, click **Poll now** three times. It's limited
+   to once every 10 s per competitor and counts down in between. Each change gets its AI
+   summary a few seconds later.
 
 The live instance uses a real model (OpenAI). To see the failure handling with injected
 LLM errors and latency, run it locally with the mock server (below).
@@ -276,8 +276,8 @@ A small React app with two views, served by the API in production:
   - **Snapshots:** newest first, with fetch time, listing fields and the AI summary. A
     snapshot can also show "Summarizing…", "summary could not be generated" or "No change
     since previous snapshot."
-  - **Unchanged runs collapsed:** polling every minute produces hundreds of identical
-    snapshots, which would push the few real changes out of view. The timeline shows each
+  - **Unchanged runs collapsed:** polling around the clock produces many identical
+    snapshots (96 a day per competitor at 15 minutes), which would push the few real changes out of view. The timeline shows each
     change once, followed by a single line such as "No change in 143 checks · last checked
     14:28". Every fetch is still stored; only the display is grouped.
     - **How:** `GET /api/competitors/:id/timeline` groups the snapshots in SQL. A running
@@ -352,8 +352,9 @@ The live instance at **https://competitorpulse.fly.dev** runs on **Fly.io** with
   - **Row level security.** A migration enables RLS with no policies on every table, so
     Supabase's auto-generated public REST API can't read or write them. The app connects
     as the table owner, which RLS doesn't restrict.
-- **Secrets.** `DATABASE_URL` and the `LLM_*` variables are Fly secrets. The deployed
-  instance polls every 60 s so a reviewer sees all four versions within a few minutes.
+- **Secrets.** `DATABASE_URL` and the `LLM_*` variables are Fly secrets.
+- **Interval.** The deployed instance polls every 15 minutes, the brief's production
+  setting. **Poll now** steps through the versions on demand.
 
 To deploy your own:
 

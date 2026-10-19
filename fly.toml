@@ -18,8 +18,8 @@ kill_timeout = '60s'
   NODE_ENV = 'production'
   DATABASE_SSL = 'true'
   DATABASE_POOL_MAX = '5'
-  # Short so reviewers see every listing version within minutes; production would use 900.
-  POLL_INTERVAL_SECONDS = '60'
+  # The brief's production setting. "Poll now" lets a reviewer step through versions faster.
+  POLL_INTERVAL_SECONDS = '900'
   LOG_LEVEL = 'info'
 
 [http_service]
