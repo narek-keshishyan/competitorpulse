@@ -3,7 +3,7 @@ import type {
   CatalogEntry,
   Competitor,
   PollRequestAccepted,
-  Snapshot,
+  TimelineEntry,
 } from '@competitorpulse/shared';
 
 export class ApiRequestError extends Error {
@@ -51,8 +51,8 @@ export const api = {
 
   removeCompetitor: (id: string) => request<void>(competitorPath(id), { method: 'DELETE' }),
 
-  listSnapshots: (id: string, signal?: AbortSignal) =>
-    request<Snapshot[]>(`${competitorPath(id)}/snapshots`, { signal }),
+  listTimeline: (id: string, signal?: AbortSignal) =>
+    request<TimelineEntry[]>(`${competitorPath(id)}/timeline`, { signal }),
 
   pollNow: (id: string) =>
     request<PollRequestAccepted>(`${competitorPath(id)}/poll`, { method: 'POST' }),

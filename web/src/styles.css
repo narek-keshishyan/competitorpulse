@@ -180,3 +180,11 @@ mark.changed {
 .error {
   color: #b00020;
 }
+
+.unchanged-run {
+  margin: 0 0 12px;
+  padding: 6px 14px;
+  border: 1px dashed #ccc;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}

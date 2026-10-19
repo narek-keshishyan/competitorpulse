@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { Snapshot } from '@competitorpulse/shared';
+import type { TimelineEntry } from '@competitorpulse/shared';
 import { api, ApiRequestError } from '../api';
 import { SnapshotCard } from '../components/SnapshotCard';
 
@@ -15,7 +15,7 @@ export function CompetitorTimeline() {
 }
 
 function Timeline({ id }: { id: string }) {
-  const [snapshots, setSnapshots] = useState<Snapshot[] | null>(null);
+  const [entries, setEntries] = useState<TimelineEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notTracked, setNotTracked] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -49,7 +49,7 @@ function Timeline({ id }: { id: string }) {
 
     const load = async () => {
       try {
-        setSnapshots(await api.listSnapshots(id, controller.signal));
+        setEntries(await api.listTimeline(id, controller.signal));
         setError(null);
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -109,12 +109,24 @@ function Timeline({ id }: { id: string }) {
 
       {notTracked ? (
         <p className="muted">This competitor is not tracked.</p>
-      ) : snapshots === null ? (
+      ) : entries === null ? (
         <p className="muted">Loading…</p>
-      ) : snapshots.length === 0 ? (
+      ) : entries.length === 0 ? (
         <p className="muted">No snapshots yet. The first poll runs within a few seconds.</p>
       ) : (
-        snapshots.map((s) => <SnapshotCard key={s.id} snapshot={s} />)
+        entries.map((entry) => (
+          <Fragment key={entry.snapshot.id}>
+            {/* Newest first, so the checks that followed a change are shown above it. */}
+            {entry.unchangedChecks > 0 && (
+              <p className="unchanged-run muted">
+                No change in {entry.unchangedChecks}{' '}
+                {entry.unchangedChecks === 1 ? 'check' : 'checks'} · last checked{' '}
+                {new Date(entry.lastCheckedAt).toLocaleString()}
+              </p>
+            )}
+            <SnapshotCard snapshot={entry.snapshot} />
+          </Fragment>
+        ))
       )}
     </section>
   );
