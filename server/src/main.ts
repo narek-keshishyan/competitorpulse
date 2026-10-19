@@ -69,7 +69,7 @@ if (config.workersEnabled) {
   app.log.info(
     {
       pollIntervalSeconds: config.polling.intervalSeconds,
-      llmBaseUrl: config.llm.baseUrl,
+      llmBaseUrl: config.llm.baseUrl ?? 'https://api.openai.com/v1 (default)',
       llmModel: config.llm.model,
     },
     'background workers started',

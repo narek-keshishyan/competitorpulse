@@ -216,14 +216,14 @@ OpenAI-compatible endpoint works. The SDK's built-in retries are turned off
 (`maxRetries: 0`): the summary worker owns retrying, so one attempt in the database is
 exactly one billed request. Configure it with three variables:
 
-| Provider       | `LLM_BASE_URL`                 | `LLM_MODEL` (example) |
-| -------------- | ------------------------------ | --------------------- |
-| Mock (default) | `http://localhost:4001/v1`     | `mock-llm`            |
-| OpenAI         | `https://api.openai.com/v1`    | `gpt-4o-mini`         |
-| Anthropic      | `https://api.anthropic.com/v1` | a Claude Haiku model  |
-| Ollama (local) | `http://localhost:11434/v1`    | `llama3.2`            |
+| Provider         | `LLM_BASE_URL`                      | `LLM_MODEL` (example)   |
+| ---------------- | ----------------------------------- | ----------------------- |
+| OpenAI (default) | unset (`https://api.openai.com/v1`) | `gpt-4o-mini` (default) |
+| Mock server      | `http://localhost:4001/v1`          | `mock-llm`              |
+| Anthropic        | `https://api.anthropic.com/v1`      | a Claude Haiku model    |
+| Ollama (local)   | `http://localhost:11434/v1`         | `llama3.2`              |
 
-Set `LLM_API_KEY` for real providers. The mock's `POST /control/configure` (for example
+With `LLM_BASE_URL` unset the SDK talks to OpenAI, and `LLM_API_KEY` is then required (the app refuses to start without it). Local endpoints don't need a key. The mock's `POST /control/configure` (for example
 `{"failNext": 2}` or `{"latencyMs": 20000}`) is a good way to watch the retries and the
 timeout working: snapshots keep appearing, summaries show "Summarizing…" and then complete
 once the mock recovers.
@@ -232,28 +232,28 @@ once the mock recovers.
 
 All configuration comes from environment variables, validated at startup.
 
-| Variable                                         | Default                                  | Notes                                                  |
-| ------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------ |
-| `DATABASE_URL`                                   | (required)                               | Postgres connection string                             |
-| `DATABASE_SSL`                                   | `false`                                  | `true` for hosted Postgres (Supabase)                  |
-| `DATABASE_SSL_CA`                                |                                          | PEM of the server CA; enables certificate verification |
-| `DATABASE_POOL_MAX`                              | `10`                                     |                                                        |
-| `HOST` / `PORT`                                  | `0.0.0.0` / `3000`                       |                                                        |
-| `LOG_LEVEL`                                      | `info`                                   |                                                        |
-| `POLL_INTERVAL_SECONDS`                          | `60`                                     | Per-competitor polling interval                        |
-| `POLL_TICK_MS`                                   | `5000`                                   | How often the poller looks for due competitors         |
-| `POLL_BATCH_SIZE` / `POLL_CONCURRENCY`           | `50` / `10`                              |                                                        |
-| `LISTING_SOURCE_URL`                             | `http://127.0.0.1:$PORT/stub`            |                                                        |
-| `LISTING_FETCH_TIMEOUT_MS`                       | `5000`                                   |                                                        |
-| `ENABLE_STUB` / `LISTING_FIXTURES_PATH`          | `true` / `server/fixtures/listings.json` | The fixture-backed stub                                |
-| `WORKERS_ENABLED`                                | `true`                                   | `false` for API-only replicas                          |
-| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`     | mock server                              | See [LLM](#llm)                                        |
-| `LLM_TIMEOUT_MS`                                 | `15000`                                  |                                                        |
-| `LLM_MAX_ATTEMPTS`                               | `5`                                      |                                                        |
-| `LLM_CONCURRENCY`                                | `4`                                      | Parallel LLM calls (and jobs claimed per run)          |
-| `SUMMARY_TICK_MS`                                | `3000`                                   | How often the summary worker looks for pending jobs    |
-| `SUMMARY_RETRY_BASE_MS` / `SUMMARY_RETRY_MAX_MS` | `5000` / `300000`                        | Retry backoff                                          |
-| `WEB_DIST_DIR`                                   |                                          | Built web app to serve (set in the Docker image)       |
+| Variable                                         | Default                                        | Notes                                                  |
+| ------------------------------------------------ | ---------------------------------------------- | ------------------------------------------------------ |
+| `DATABASE_URL`                                   | (required)                                     | Postgres connection string                             |
+| `DATABASE_SSL`                                   | `false`                                        | `true` for hosted Postgres (Supabase)                  |
+| `DATABASE_SSL_CA`                                |                                                | PEM of the server CA; enables certificate verification |
+| `DATABASE_POOL_MAX`                              | `10`                                           |                                                        |
+| `HOST` / `PORT`                                  | `0.0.0.0` / `3000`                             |                                                        |
+| `LOG_LEVEL`                                      | `info`                                         |                                                        |
+| `POLL_INTERVAL_SECONDS`                          | `60`                                           | Per-competitor polling interval                        |
+| `POLL_TICK_MS`                                   | `5000`                                         | How often the poller looks for due competitors         |
+| `POLL_BATCH_SIZE` / `POLL_CONCURRENCY`           | `50` / `10`                                    |                                                        |
+| `LISTING_SOURCE_URL`                             | `http://127.0.0.1:$PORT/stub`                  |                                                        |
+| `LISTING_FETCH_TIMEOUT_MS`                       | `5000`                                         |                                                        |
+| `ENABLE_STUB` / `LISTING_FIXTURES_PATH`          | `true` / `server/fixtures/listings.json`       | The fixture-backed stub                                |
+| `WORKERS_ENABLED`                                | `true`                                         | `false` for API-only replicas                          |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`     | OpenAI / (required for OpenAI) / `gpt-4o-mini` | See [LLM](#llm). Docker compose uses the mock.         |
+| `LLM_TIMEOUT_MS`                                 | `15000`                                        |                                                        |
+| `LLM_MAX_ATTEMPTS`                               | `5`                                            |                                                        |
+| `LLM_CONCURRENCY`                                | `4`                                            | Parallel LLM calls (and jobs claimed per run)          |
+| `SUMMARY_TICK_MS`                                | `3000`                                         | How often the summary worker looks for pending jobs    |
+| `SUMMARY_RETRY_BASE_MS` / `SUMMARY_RETRY_MAX_MS` | `5000` / `300000`                              | Retry backoff                                          |
+| `WEB_DIST_DIR`                                   |                                                | Built web app to serve (set in the Docker image)       |
 
 ## Deployment
 
@@ -273,7 +273,7 @@ To deploy your own:
 fly apps create <app-name>
 fly secrets set -a <app-name> \
   DATABASE_URL='postgres://...pooler.supabase.com:5432/postgres' \
-  LLM_BASE_URL='https://api.openai.com/v1' LLM_API_KEY='sk-...' LLM_MODEL='gpt-4o-mini'
+  LLM_API_KEY='sk-...'   # OpenAI is the default; set LLM_BASE_URL/LLM_MODEL for another provider
 fly deploy -a <app-name> --ha=false
 ```
 

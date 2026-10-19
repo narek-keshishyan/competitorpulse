@@ -23,7 +23,8 @@ export class LlmError extends Error {
 }
 
 export interface OpenAiCompatibleClientOptions {
-  baseUrl: string;
+  /** Defaults to OpenAI's API. */
+  baseUrl?: string;
   apiKey: string;
   model: string;
   timeoutMs: number;

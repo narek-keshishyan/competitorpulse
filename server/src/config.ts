@@ -4,48 +4,57 @@ import { z } from 'zod';
 const positiveInt = z.coerce.number().int().positive();
 const booleanFlag = z.stringbool();
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  HOST: z.string().default('0.0.0.0'),
-  PORT: positiveInt.default(3000),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    HOST: z.string().default('0.0.0.0'),
+    PORT: positiveInt.default(3000),
+    LOG_LEVEL: z
+      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+      .default('info'),
 
-  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  // Hosted Postgres (e.g. Supabase) needs TLS; local docker Postgres does not.
-  DATABASE_SSL: booleanFlag.default(false),
-  // PEM of the server's CA. When set, the certificate is verified; without it TLS still
-  // encrypts but does not authenticate the server.
-  DATABASE_SSL_CA: z.string().optional(),
-  DATABASE_POOL_MAX: positiveInt.default(10),
+    DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+    // Hosted Postgres (e.g. Supabase) needs TLS; local docker Postgres does not.
+    DATABASE_SSL: booleanFlag.default(false),
+    // PEM of the server's CA. When set, the certificate is verified; without it TLS still
+    // encrypts but does not authenticate the server.
+    DATABASE_SSL_CA: z.string().optional(),
+    DATABASE_POOL_MAX: positiveInt.default(10),
 
-  // Where the poller fetches listings from. Defaults to the stub served by this process.
-  LISTING_SOURCE_URL: z.url().optional(),
-  LISTING_FETCH_TIMEOUT_MS: positiveInt.default(5_000),
-  ENABLE_STUB: booleanFlag.default(true),
-  LISTING_FIXTURES_PATH: z
-    .string()
-    .default(fileURLToPath(new URL('../fixtures/listings.json', import.meta.url))),
+    // Where the poller fetches listings from. Defaults to the stub served by this process.
+    LISTING_SOURCE_URL: z.url().optional(),
+    LISTING_FETCH_TIMEOUT_MS: positiveInt.default(5_000),
+    ENABLE_STUB: booleanFlag.default(true),
+    LISTING_FIXTURES_PATH: z
+      .string()
+      .default(fileURLToPath(new URL('../fixtures/listings.json', import.meta.url))),
 
-  // Lets you run API-only replicas while a separate deployment runs the background loops.
-  WORKERS_ENABLED: booleanFlag.default(true),
+    // Lets you run API-only replicas while a separate deployment runs the background loops.
+    WORKERS_ENABLED: booleanFlag.default(true),
 
-  POLL_INTERVAL_SECONDS: positiveInt.default(60),
-  POLL_TICK_MS: positiveInt.default(5_000),
-  POLL_BATCH_SIZE: positiveInt.default(50),
-  POLL_CONCURRENCY: positiveInt.default(10),
+    POLL_INTERVAL_SECONDS: positiveInt.default(60),
+    POLL_TICK_MS: positiveInt.default(5_000),
+    POLL_BATCH_SIZE: positiveInt.default(50),
+    POLL_CONCURRENCY: positiveInt.default(10),
 
-  LLM_BASE_URL: z.url().default('http://localhost:4001/v1'),
-  LLM_API_KEY: z.string().default('not-needed-for-mock'),
-  LLM_MODEL: z.string().min(1).default('mock-llm'),
-  LLM_TIMEOUT_MS: positiveInt.default(15_000),
-  LLM_MAX_ATTEMPTS: positiveInt.default(5),
-  LLM_CONCURRENCY: positiveInt.default(4),
-  SUMMARY_TICK_MS: positiveInt.default(3_000),
-  SUMMARY_RETRY_BASE_MS: positiveInt.default(5_000),
-  SUMMARY_RETRY_MAX_MS: positiveInt.default(5 * 60_000),
+    // Unset means OpenAI's own API (the SDK default). Set it for any other OpenAI-compatible
+    // endpoint: the bundled mock server, Ollama, Anthropic's compatibility endpoint, ...
+    LLM_BASE_URL: z.url().optional(),
+    LLM_API_KEY: z.string().min(1).optional(),
+    LLM_MODEL: z.string().min(1).default('gpt-4o-mini'),
+    LLM_TIMEOUT_MS: positiveInt.default(15_000),
+    LLM_MAX_ATTEMPTS: positiveInt.default(5),
+    LLM_CONCURRENCY: positiveInt.default(4),
+    SUMMARY_TICK_MS: positiveInt.default(3_000),
+    SUMMARY_RETRY_BASE_MS: positiveInt.default(5_000),
+    SUMMARY_RETRY_MAX_MS: positiveInt.default(5 * 60_000),
 
-  WEB_DIST_DIR: z.string().optional(),
-});
+    WEB_DIST_DIR: z.string().optional(),
+  })
+  .refine((env) => env.LLM_BASE_URL !== undefined || env.LLM_API_KEY !== undefined, {
+    path: ['LLM_API_KEY'],
+    message: 'is required when LLM_BASE_URL is not set (OpenAI)',
+  });
 
 export type Env = z.input<typeof envSchema>;
 
@@ -87,7 +96,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     },
     llm: {
       baseUrl: e.LLM_BASE_URL,
-      apiKey: e.LLM_API_KEY,
+      // Local endpoints (mock server, Ollama) accept any key, but the SDK insists on one.
+      apiKey: e.LLM_API_KEY ?? 'not-needed',
       model: e.LLM_MODEL,
       timeoutMs: e.LLM_TIMEOUT_MS,
       maxAttempts: e.LLM_MAX_ATTEMPTS,
