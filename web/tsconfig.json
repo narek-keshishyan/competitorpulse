@@ -1,0 +1,16 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "declaration": false,
+    "types": ["vite/client"],
+    "paths": {
+      "@competitorpulse/shared": ["../shared/src/index.ts"]
+    }
+  },
+  "include": ["src", "test", "vite.config.ts"]
+}
