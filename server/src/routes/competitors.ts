@@ -1,6 +1,11 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { sql } from 'kysely';
-import type { Competitor, CreateCompetitorRequest, Snapshot } from '@competitorpulse/shared';
+import type {
+  CatalogEntry,
+  Competitor,
+  CreateCompetitorRequest,
+  Snapshot,
+} from '@competitorpulse/shared';
 import type { Db } from '../db/connection.js';
 import type { SnapshotRow } from '../db/schema.js';
 import type { ListingSource } from '../listing-source/http-source.js';
@@ -54,6 +59,22 @@ export const competitorRoutes: FastifyPluginAsync<CompetitorRoutesOptions> = asy
     return rows.map((r) => ({ id: r.id, createdAt: r.created_at.toISOString() }));
   });
 
+  // What can be tracked, so the UI can suggest ids instead of making people guess them.
+  app.get('/catalog', async (request, reply) => {
+    let ids: string[];
+    try {
+      ids = await listingSource.listCompetitorIds();
+    } catch (err) {
+      request.log.warn({ err }, 'listing source unavailable while reading catalog');
+      return sendError(reply, 503, 'source_unavailable', 'Listing source is unavailable');
+    }
+    const tracked = new Set(
+      (await db.selectFrom('competitors').select('id').execute()).map((r) => r.id),
+    );
+    const catalog: CatalogEntry[] = [...ids].sort().map((id) => ({ id, tracked: tracked.has(id) }));
+    return catalog;
+  });
+
   app.post<{ Body: CreateCompetitorRequest }>(
     '/competitors',
     {
@@ -75,7 +96,7 @@ export const competitorRoutes: FastifyPluginAsync<CompetitorRoutesOptions> = asy
 
       let known: boolean;
       try {
-        known = await listingSource.hasCompetitor(id);
+        known = (await listingSource.listCompetitorIds()).includes(id);
       } catch (err) {
         request.log.warn({ err }, 'listing source unavailable while adding competitor');
         return sendError(reply, 503, 'source_unavailable', 'Listing source is unavailable');

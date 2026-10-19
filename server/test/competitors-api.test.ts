@@ -79,7 +79,7 @@ describe('competitors API', () => {
 
     it('answers 503 when the listing source cannot be reached', async () => {
       const source = fakeListingSource();
-      vi.mocked(source.hasCompetitor).mockRejectedValue(new ListingSourceError('down'));
+      vi.mocked(source.listCompetitorIds).mockRejectedValue(new ListingSourceError('down'));
       const isolated = await buildTestApp(db, { listingSource: source });
 
       const res = await isolated.inject({
@@ -87,6 +87,32 @@ describe('competitors API', () => {
         url: '/api/competitors',
         payload: { id: 'acme-crm' },
       });
+
+      expect(res.statusCode).toBe(503);
+      await isolated.close();
+    });
+  });
+
+  describe('GET /api/catalog', () => {
+    it('lists trackable ids alphabetically and flags the tracked ones', async () => {
+      await track('ferry-pay');
+
+      const res = await app.inject({ method: 'GET', url: '/api/catalog' });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual([
+        { id: 'acme-crm', tracked: false },
+        { id: 'ferry-pay', tracked: true },
+        { id: 'north-analytics', tracked: false },
+      ]);
+    });
+
+    it('answers 503 when the listing source cannot be reached', async () => {
+      const source = fakeListingSource();
+      vi.mocked(source.listCompetitorIds).mockRejectedValue(new ListingSourceError('down'));
+      const isolated = await buildTestApp(db, { listingSource: source });
+
+      const res = await isolated.inject({ method: 'GET', url: '/api/catalog' });
 
       expect(res.statusCode).toBe(503);
       await isolated.close();

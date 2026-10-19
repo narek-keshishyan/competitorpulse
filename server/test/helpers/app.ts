@@ -9,7 +9,7 @@ export const knownIds = ['acme-crm', 'north-analytics', 'ferry-pay'];
 export function fakeListingSource(): ListingSource {
   return {
     fetchListing: vi.fn(async () => ({ title: 't', tagline: 't', price: 'p', description: 'd' })),
-    hasCompetitor: vi.fn(async (id: string) => knownIds.includes(id)),
+    listCompetitorIds: vi.fn(async () => knownIds),
   };
 }
 

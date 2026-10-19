@@ -41,9 +41,8 @@ describe('HttpListingSource', () => {
     await expect(source('/stub').fetchListing('acme')).resolves.toEqual(listing);
   });
 
-  it('reports which competitors exist', async () => {
-    await expect(source('/stub').hasCompetitor('acme')).resolves.toBe(true);
-    await expect(source('/stub').hasCompetitor('nope')).resolves.toBe(false);
+  it('lists the competitors the source knows', async () => {
+    await expect(source('/stub').listCompetitorIds()).resolves.toEqual(['acme']);
   });
 
   it('raises ListingNotFoundError on 404', async () => {

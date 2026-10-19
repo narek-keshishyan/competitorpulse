@@ -36,6 +36,12 @@ export interface Snapshot extends Listing {
   summaryStatus: SummaryStatus;
 }
 
+/** A competitor the listing source knows about, i.e. one that can be tracked. */
+export interface CatalogEntry {
+  id: string;
+  tracked: boolean;
+}
+
 export interface CreateCompetitorRequest {
   id: string;
 }

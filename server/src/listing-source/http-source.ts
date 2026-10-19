@@ -4,7 +4,8 @@ import type { Listing } from '@competitorpulse/shared';
 /** Where the poller gets the current listing of a competitor from. */
 export interface ListingSource {
   fetchListing(id: string): Promise<Listing>;
-  hasCompetitor(id: string): Promise<boolean>;
+  /** Every competitor id the source can serve. */
+  listCompetitorIds(): Promise<string[]>;
 }
 
 export class ListingSourceError extends Error {
@@ -46,13 +47,13 @@ export class HttpListingSource implements ListingSource {
     return parsed.data;
   }
 
-  async hasCompetitor(id: string): Promise<boolean> {
+  async listCompetitorIds(): Promise<string[]> {
     const body = await this.getJson('/listings');
     const parsed = catalogSchema.safeParse(body);
     if (!parsed.success) {
       throw new ListingSourceError('Listing catalog has an unexpected shape');
     }
-    return parsed.data.ids.includes(id);
+    return parsed.data.ids;
   }
 
   private async getJson(path: string, competitorId?: string): Promise<unknown> {

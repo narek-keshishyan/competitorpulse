@@ -20,7 +20,7 @@ const listing = (price: string): Listing => ({
 const log = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 
 function fakeSource(impl: (id: string) => Promise<Listing>): ListingSource {
-  return { fetchListing: vi.fn(impl), hasCompetitor: vi.fn(async () => true) };
+  return { fetchListing: vi.fn(impl), listCompetitorIds: vi.fn(async () => []) };
 }
 
 async function secondsUntilNextPoll(db: Db, id: string): Promise<number> {
