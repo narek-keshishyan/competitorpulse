@@ -13,11 +13,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
     "tsx": "^4.23.15",
     "vitest": "^5.0.5"
   },
   "dependencies": {
     "fastify": "^5.12.7",
+    "kysely": "^0.29.7",
+    "pg": "^8.23.1",
     "zod": "^4.6.7"
   }
 }
