@@ -12,13 +12,17 @@ import { diffListings, hashListing, normalizeListing } from './diff.js';
  * deliberately not called here: a changed snapshot is stored as `pending` and the
  * summary worker picks it up, so a slow model never delays or endangers the snapshot.
  *
+ * `fetched_at` defaults to the database clock, taken after the lock is acquired: with
+ * several app instances, their (possibly skewed) clocks must not decide which snapshot
+ * counts as the previous one or how the timeline is ordered.
+ *
  * Returns null if the competitor no longer exists (it was removed while we fetched).
  */
 export async function recordSnapshot(
   db: Db,
   competitorId: string,
   listing: Listing,
-  fetchedAt: Date,
+  fetchedAt?: Date,
 ): Promise<SnapshotRow | null> {
   return db.transaction().execute(async (trx) => {
     const competitor = await trx
@@ -46,7 +50,7 @@ export async function recordSnapshot(
       .insertInto('snapshots')
       .values({
         competitor_id: competitorId,
-        fetched_at: fetchedAt,
+        fetched_at: fetchedAt ?? sql<Date>`statement_timestamp()`,
         ...normalized,
         content_hash: hashListing(normalized),
         changed,
@@ -64,7 +68,7 @@ export async function recordSnapshot(
 
     await trx
       .updateTable('competitors')
-      .set({ last_polled_at: fetchedAt, consecutive_failures: 0, last_error: null })
+      .set({ last_polled_at: snapshot.fetched_at, consecutive_failures: 0, last_error: null })
       .where('id', '=', competitorId)
       .execute();
 

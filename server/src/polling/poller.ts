@@ -89,7 +89,7 @@ export class Poller {
       return 'failed';
     }
 
-    const snapshot = await recordSnapshot(db, id, listing, new Date());
+    const snapshot = await recordSnapshot(db, id, listing);
     if (!snapshot) return 'gone';
     if (snapshot.changed) {
       log.info(

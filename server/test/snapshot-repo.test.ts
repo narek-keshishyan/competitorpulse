@@ -95,6 +95,16 @@ describe('recordSnapshot', () => {
     });
   });
 
+  it('stamps the fetch time with the database clock by default', async () => {
+    const before = await db
+      .selectNoFrom((eb) => eb.fn<Date>('now').as('t'))
+      .executeTakeFirstOrThrow();
+
+    const snap = await recordSnapshot(db, 'acme-crm', v1);
+
+    expect(snap?.fetched_at.getTime()).toBeGreaterThanOrEqual(before.t.getTime());
+  });
+
   it('returns null when the competitor was removed in the meantime', async () => {
     await db.deleteFrom('competitors').where('id', '=', 'acme-crm').execute();
 
