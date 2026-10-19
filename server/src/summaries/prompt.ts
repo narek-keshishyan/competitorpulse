@@ -2,7 +2,7 @@ import type { Listing, ListingField } from '@competitorpulse/shared';
 import type { ChatMessage } from './llm-client.js';
 
 /** Part of the summary cache key: changing the prompt must not serve summaries of the old one. */
-export const PROMPT_VERSION = 2;
+export const PROMPT_VERSION = 3;
 
 const SYSTEM_PROMPT = [
   "You explain changes to a competitor's product listing to a product marketing team.",
@@ -16,8 +16,9 @@ const SYSTEM_PROMPT = [
 ].join(' ');
 
 /**
- * The deterministic diff goes first: it anchors the model on what actually changed (so it
- * doesn't invent changes), and keeps the summary useful even with a weak model.
+ * Only the deterministic diff is sent, plus the product name for context. It anchors the
+ * model on what actually changed (so it neither invents changes nor narrates unchanged
+ * fields) and keeps every billed request small.
  */
 export function buildSummaryMessages(
   previous: Listing,
@@ -31,15 +32,7 @@ export function buildSummaryMessages(
     )
     .join('; ');
 
-  const user = [
-    `Changes: ${changes}.`,
-    '',
-    'Previous listing:',
-    JSON.stringify(previous, null, 2),
-    '',
-    'Current listing:',
-    JSON.stringify(current, null, 2),
-  ].join('\n');
+  const user = [`Changes: ${changes}.`, `Product: ${JSON.stringify(current.title)}`].join('\n');
 
   return [
     { role: 'system', content: SYSTEM_PROMPT },

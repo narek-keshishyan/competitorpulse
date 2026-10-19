@@ -29,8 +29,8 @@ describe('buildSummaryMessages', () => {
     ).toBe(true);
   });
 
-  it('includes both full listings for context', () => {
-    expect(user?.content).toContain(JSON.stringify(previous, null, 2));
-    expect(user?.content).toContain(JSON.stringify(current, null, 2));
+  it('sends only the changed fields and the product name', () => {
+    expect(user?.content).toContain('Product: "Acme CRM"');
+    expect(user?.content).not.toContain('Track leads and deals');
   });
 });

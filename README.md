@@ -183,9 +183,10 @@ The LLM call is deliberately not on the polling path:
    - **Fencing.** The claim bumps the attempt counter, and every later write requires that
      number. A worker whose lease ran out can never overwrite the result of the worker that
      took over.
-3. **Build the prompt.** It contains the computed diff (`price: "$39/mo" -> "$29/mo"`)
-   followed by both full listings. The model is told to treat the listing text as untrusted
-   data.
+3. **Build the prompt.** It contains only the computed diff
+   (`price: "$39/mo" -> "$29/mo"`) and the product name. That keeps each billed request
+   small and stops the model from narrating unchanged fields. The model is told to treat the
+   listing text as untrusted data.
 4. **Call the model.** Each call has a hard timeout (`LLM_TIMEOUT_MS`, default 15 s). Errors
    are classified: timeouts, 429 and 5xx are retried with exponential backoff and jitter,
    while 400, 401 and 404 fail immediately because retrying won't help. After
