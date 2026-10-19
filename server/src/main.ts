@@ -21,6 +21,7 @@ const app = await buildApp({
   stub,
   webDistDir: config.webDistDir,
   onPollRequested: () => pollLoop?.wake(),
+  manualPollCooldownSeconds: config.polling.manualCooldownSeconds,
   logger: { level: config.logLevel },
 });
 

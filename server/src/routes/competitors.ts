@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { sql } from 'kysely';
 import type {
+  ApiError,
   CatalogEntry,
   Competitor,
   CreateCompetitorRequest,
@@ -16,6 +17,8 @@ export interface CompetitorRoutesOptions {
   listingSource: ListingSource;
   /** Called when a competitor became due right now, so the poller need not wait a tick. */
   onPollRequested?: () => void;
+  /** Minimum seconds between two accepted "Poll now" requests per competitor. */
+  manualPollCooldownSeconds: number;
 }
 
 const COMPETITOR_ID_PATTERN = '^[a-z0-9][a-z0-9-]{0,62}$';
@@ -54,8 +57,10 @@ function toSnapshot(row: SnapshotRow): Snapshot {
 
 export const competitorRoutes: FastifyPluginAsync<CompetitorRoutesOptions> = async (
   app,
-  { db, listingSource, onPollRequested },
+  { db, listingSource, onPollRequested, manualPollCooldownSeconds },
 ) => {
+  const cooldown = sql<Date>`make_interval(secs => ${manualPollCooldownSeconds}::float8)`;
+
   const exists = async (id: string) =>
     (await db.selectFrom('competitors').select('id').where('id', '=', id).executeTakeFirst()) !==
     undefined;
@@ -181,16 +186,46 @@ export const competitorRoutes: FastifyPluginAsync<CompetitorRoutesOptions> = asy
     '/competitors/:id/poll',
     { schema: { params: idParams } },
     async (request, reply) => {
-      const updated = await db
+      const { id } = request.params;
+      // Check and claim in one statement: concurrent requests are serialized on the row, so
+      // exactly one per cooldown window gets through, across all clients and instances.
+      // Without this, a loop of requests would make the poller write a snapshot per run.
+      const accepted = await db
         .updateTable('competitors')
-        .set({ next_poll_at: sql<Date>`now()` })
-        .where('id', '=', request.params.id)
+        .set({ next_poll_at: sql<Date>`now()`, last_manual_poll_at: sql<Date>`now()` })
+        .where('id', '=', id)
+        .where((eb) =>
+          eb.or([
+            eb('last_manual_poll_at', 'is', null),
+            eb('last_manual_poll_at', '<=', sql<Date>`now() - ${cooldown}`),
+          ]),
+        )
         .executeTakeFirst();
-      if (updated.numUpdatedRows === 0n) {
-        return sendError(reply, 404, 'not_found', `${request.params.id} is not tracked`);
+
+      if (accepted.numUpdatedRows === 0n) {
+        const row = await db
+          .selectFrom('competitors')
+          .select(
+            sql<number>`ceil(extract(epoch from last_manual_poll_at + ${cooldown} - now()))::int`.as(
+              'retry_after',
+            ),
+          )
+          .where('id', '=', id)
+          .executeTakeFirst();
+        if (!row) {
+          return sendError(reply, 404, 'not_found', `${id} is not tracked`);
+        }
+        const retryAfterSeconds = Math.max(1, row.retry_after);
+        const body: ApiError = {
+          error: 'too_many_requests',
+          message: `${id} was just polled; try again in ${retryAfterSeconds}s`,
+          retryAfterSeconds,
+        };
+        return reply.code(429).header('retry-after', String(retryAfterSeconds)).send(body);
       }
+
       onPollRequested?.();
-      return reply.code(202).send({ id: request.params.id, status: 'queued' });
+      return reply.code(202).send({ id, status: 'queued' });
     },
   );
 };

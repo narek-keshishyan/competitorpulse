@@ -10,6 +10,7 @@ export interface CompetitorsTable {
   last_polled_at: Date | null;
   consecutive_failures: Generated<number>;
   last_error: string | null;
+  last_manual_poll_at: Date | null;
 }
 
 export interface SnapshotsTable {

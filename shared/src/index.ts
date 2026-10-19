@@ -55,4 +55,6 @@ export interface CreateCompetitorRequest {
 export interface ApiError {
   error: string;
   message: string;
+  /** Set on 429 responses: how long to wait before trying again. */
+  retryAfterSeconds?: number;
 }

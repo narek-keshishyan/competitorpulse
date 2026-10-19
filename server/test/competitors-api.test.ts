@@ -284,6 +284,68 @@ describe('competitors API', () => {
 
       expect(res.statusCode).toBe(404);
     });
+
+    const pollNow = () => app.inject({ method: 'POST', url: '/api/competitors/acme-crm/poll' });
+
+    it('rejects a second request within the cooldown without making the competitor due', async () => {
+      await track('acme-crm');
+      await pollNow();
+      const later = new Date(Date.now() + 3_600_000);
+      await db.updateTable('competitors').set({ next_poll_at: later }).execute();
+      onPollRequested.mockClear();
+
+      const res = await pollNow();
+
+      expect(res.statusCode).toBe(429);
+      expect(Number(res.headers['retry-after'])).toBeGreaterThanOrEqual(1);
+      expect(Number(res.headers['retry-after'])).toBeLessThanOrEqual(10);
+      expect(res.json()).toMatchObject({
+        error: 'too_many_requests',
+        retryAfterSeconds: Number(res.headers['retry-after']),
+      });
+      const row = await db
+        .selectFrom('competitors')
+        .select('next_poll_at')
+        .executeTakeFirstOrThrow();
+      expect(row.next_poll_at).toEqual(later);
+      expect(onPollRequested).not.toHaveBeenCalled();
+    });
+
+    it('accepts requests again once the cooldown has passed', async () => {
+      await track('acme-crm');
+      await pollNow();
+      await db
+        .updateTable('competitors')
+        .set({ last_manual_poll_at: new Date(Date.now() - 11_000) })
+        .execute();
+
+      const res = await pollNow();
+
+      expect(res.statusCode).toBe(202);
+    });
+
+    it('lets exactly one of many simultaneous requests through', async () => {
+      await track('acme-crm');
+
+      const responses = await Promise.all(Array.from({ length: 20 }, () => pollNow()));
+
+      const codes = responses.map((r) => r.statusCode);
+      expect(codes.filter((c) => c === 202)).toHaveLength(1);
+      expect(codes.filter((c) => c === 429)).toHaveLength(19);
+    });
+
+    it('limits competitors whose fetches keep failing as well', async () => {
+      await track('acme-crm');
+      await db
+        .updateTable('competitors')
+        .set({ last_polled_at: null, consecutive_failures: 7, last_error: 'down' })
+        .execute();
+
+      await pollNow();
+      const res = await pollNow();
+
+      expect(res.statusCode).toBe(429);
+    });
   });
 
   it('names client errors after their status code', async () => {

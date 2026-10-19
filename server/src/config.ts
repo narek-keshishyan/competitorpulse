@@ -36,6 +36,8 @@ const envSchema = z
     POLL_TICK_MS: positiveInt.default(5_000),
     POLL_BATCH_SIZE: positiveInt.default(50),
     POLL_CONCURRENCY: positiveInt.default(10),
+    // Minimum time between two accepted "Poll now" requests for the same competitor.
+    MANUAL_POLL_COOLDOWN_SECONDS: z.coerce.number().int().nonnegative().default(10),
 
     // Unset means OpenAI's own API (the SDK default). Set it for any other OpenAI-compatible
     // endpoint: the bundled mock server, Ollama, Anthropic's compatibility endpoint, ...
@@ -93,6 +95,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       tickMs: e.POLL_TICK_MS,
       batchSize: e.POLL_BATCH_SIZE,
       concurrency: e.POLL_CONCURRENCY,
+      manualCooldownSeconds: e.MANUAL_POLL_COOLDOWN_SECONDS,
     },
     llm: {
       baseUrl: e.LLM_BASE_URL,

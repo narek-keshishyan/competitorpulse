@@ -3,6 +3,7 @@ import { Migrator, type Migration, type MigrationProvider } from 'kysely/migrati
 import * as m0001 from './migrations/0001_initial.js';
 import * as m0002 from './migrations/0002_enable_row_level_security.js';
 import * as m0003 from './migrations/0003_index_previous_snapshot.js';
+import * as m0004 from './migrations/0004_manual_poll_cooldown.js';
 
 // Migrations are imported explicitly rather than read from disk, so they work the same
 // from TypeScript sources, compiled output and inside the container image.
@@ -10,6 +11,7 @@ const migrations: Record<string, Migration> = {
   '0001_initial': m0001,
   '0002_enable_row_level_security': m0002,
   '0003_index_previous_snapshot': m0003,
+  '0004_manual_poll_cooldown': m0004,
 };
 
 const provider: MigrationProvider = {

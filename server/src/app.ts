@@ -18,6 +18,7 @@ export interface AppOptions {
   /** When set, the listing stub is served under /stub. */
   stub?: ListingStub;
   onPollRequested?: () => void;
+  manualPollCooldownSeconds?: number;
   /** Built web app to serve, with index.html as the fallback for client-side routes. */
   webDistDir?: string;
   logger?: FastifyServerOptions['logger'];
@@ -61,6 +62,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     db: options.db,
     listingSource: options.listingSource,
     onPollRequested: options.onPollRequested,
+    manualPollCooldownSeconds: options.manualPollCooldownSeconds ?? 10,
   });
   if (options.stub) {
     await app.register(listingStubRoutes, {
