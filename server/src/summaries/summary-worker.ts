@@ -225,7 +225,10 @@ export class SummaryWorker {
     });
     await this.options.db
       .updateTable('snapshots')
-      .set({ summary_error: error, summary_next_attempt_at: new Date(Date.now() + delay) })
+      .set({
+        summary_error: error,
+        summary_next_attempt_at: sql<Date>`now() + make_interval(secs => ${delay / 1000}::float8)`,
+      })
       .where('id', '=', job.id)
       .where('summary_status', '=', 'pending')
       .execute();

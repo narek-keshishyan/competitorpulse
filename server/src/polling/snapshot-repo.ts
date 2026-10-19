@@ -1,3 +1,4 @@
+import { sql } from 'kysely';
 import type { Listing } from '@competitorpulse/shared';
 import type { Db } from '../db/connection.js';
 import type { SnapshotRow } from '../db/schema.js';
@@ -53,7 +54,9 @@ export async function recordSnapshot(
         previous_snapshot_id: previous?.id ?? null,
         summary: null,
         summary_status: changed ? 'pending' : 'not_needed',
-        summary_next_attempt_at: changed ? new Date() : null,
+        // Database time, like every other scheduling comparison, so app/DB clock skew
+        // can't make a fresh job look like it is due in the future.
+        summary_next_attempt_at: changed ? sql<Date>`now()` : null,
         summary_error: null,
       })
       .returningAll()
