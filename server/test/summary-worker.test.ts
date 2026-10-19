@@ -47,7 +47,6 @@ describe('SummaryWorker', () => {
       db,
       llm,
       log,
-      batchSize: 10,
       concurrency: 2,
       maxAttempts,
       retryBaseMs: 10_000,
@@ -180,6 +179,41 @@ describe('SummaryWorker', () => {
 
     expect(first).toHaveLength(1);
     expect(second).toEqual([]);
+  });
+
+  it('claims no more jobs than it calls in parallel, so leases start with the call', async () => {
+    for (const id of ['a', 'b', 'c']) {
+      await db.insertInto('competitors').values({ id }).execute();
+      await recordChange(id);
+    }
+    const llm = fakeLlm(async () => 'ok');
+
+    const claimed = await makeWorker(llm.client).claimDue();
+
+    expect(claimed).toHaveLength(2);
+  });
+
+  it('ignores a late result once another worker has re-claimed the job', async () => {
+    const snapshot = await recordChange();
+    let release: () => void = () => {};
+    const slow = fakeLlm(
+      () => new Promise<string>((resolve) => (release = () => resolve('stale result'))),
+    );
+    const fast = fakeLlm(async () => 'fresh result');
+
+    const slowRun = makeWorker(slow.client).runOnce();
+    await vi.waitFor(() => expect(slow.complete).toHaveBeenCalled());
+    // The slow worker's lease expires and a second worker takes over and finishes.
+    await makeDueNow(snapshot.id);
+    await makeWorker(fast.client).runOnce();
+    release();
+    await slowRun;
+
+    expect(await load(snapshot.id)).toMatchObject({
+      summary: 'fresh result',
+      summary_status: 'done',
+      summary_attempts: 2,
+    });
   });
 
   it('tolerates the competitor being removed while the summary is generated', async () => {

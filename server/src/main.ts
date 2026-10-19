@@ -50,7 +50,6 @@ if (config.workersEnabled) {
     db,
     llm: new OpenAiCompatibleClient(config.llm),
     log: summaryLog,
-    batchSize: config.summaries.batchSize,
     concurrency: config.llm.concurrency,
     maxAttempts: config.llm.maxAttempts,
     retryBaseMs: config.summaries.retryBaseMs,

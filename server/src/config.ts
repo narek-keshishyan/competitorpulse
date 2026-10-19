@@ -38,7 +38,6 @@ const envSchema = z.object({
   LLM_MAX_ATTEMPTS: positiveInt.default(5),
   LLM_CONCURRENCY: positiveInt.default(4),
   SUMMARY_TICK_MS: positiveInt.default(3_000),
-  SUMMARY_BATCH_SIZE: positiveInt.default(20),
   SUMMARY_RETRY_BASE_MS: positiveInt.default(5_000),
   SUMMARY_RETRY_MAX_MS: positiveInt.default(5 * 60_000),
 
@@ -92,7 +91,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     },
     summaries: {
       tickMs: e.SUMMARY_TICK_MS,
-      batchSize: e.SUMMARY_BATCH_SIZE,
       retryBaseMs: e.SUMMARY_RETRY_BASE_MS,
       retryMaxMs: e.SUMMARY_RETRY_MAX_MS,
     },

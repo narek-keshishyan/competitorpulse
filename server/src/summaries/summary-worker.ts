@@ -2,7 +2,6 @@ import { sql } from 'kysely';
 import type { Listing, ListingField } from '@competitorpulse/shared';
 import type { Db } from '../db/connection.js';
 import { backoffMs } from '../lib/backoff.js';
-import { mapWithConcurrency } from '../lib/concurrency.js';
 import type { Logger } from '../lib/logger.js';
 import { LlmError, type LlmClient } from './llm-client.js';
 import { buildSummaryMessages } from './prompt.js';
@@ -11,7 +10,7 @@ export interface SummaryWorkerOptions {
   db: Db;
   llm: LlmClient;
   log: Logger;
-  batchSize: number;
+  /** Max LLM calls in flight; also how many jobs one run claims. */
   concurrency: number;
   maxAttempts: number;
   retryBaseMs: number;
@@ -51,12 +50,17 @@ type Outcome = 'done' | 'retrying' | 'failed';
  * a lease (multiple workers are safe), retried with exponential backoff, and marked
  * `failed` after `maxAttempts`. Identical transitions are answered from a cache, since
  * every LLM call is billed.
+ *
+ * A run claims only as many jobs as it calls in parallel, so each lease starts when its
+ * call starts. Claiming increments `summary_attempts`, which doubles as a fencing token:
+ * every later write requires the attempt number we claimed, so a worker whose lease
+ * expired can never overwrite the job after another worker re-claimed it.
  */
 export class SummaryWorker {
   constructor(private readonly options: SummaryWorkerOptions) {}
 
   async claimDue(): Promise<number[]> {
-    const { db, batchSize, leaseMs } = this.options;
+    const { db, concurrency, leaseMs } = this.options;
     const rows = await db
       .updateTable('snapshots')
       .set((eb) => ({
@@ -70,7 +74,7 @@ export class SummaryWorker {
           .where('summary_status', '=', 'pending')
           .where('summary_next_attempt_at', '<=', sql<Date>`now()`)
           .orderBy('summary_next_attempt_at')
-          .limit(batchSize)
+          .limit(concurrency)
           .forUpdate()
           .skipLocked(),
       )
@@ -85,9 +89,7 @@ export class SummaryWorker {
     if (ids.length === 0) return result;
 
     const jobs = await this.loadJobs(ids);
-    const outcomes = await mapWithConcurrency(jobs, this.options.concurrency, (job) =>
-      this.process(job),
-    );
+    const outcomes = await Promise.allSettled(jobs.map((job) => this.process(job)));
     for (const outcome of outcomes) {
       if (outcome.status === 'fulfilled') result[outcome.value] += 1;
       else this.options.log.error({ err: outcome.reason }, 'summary job crashed');
@@ -140,36 +142,49 @@ export class SummaryWorker {
   private async process(job: SummaryJob): Promise<Outcome> {
     const { llm, log } = this.options;
     if (!job.previous || !job.previousHash) {
-      await this.markFailed(job.id, 'Previous snapshot is missing');
+      await this.markFailed(job, 'Previous snapshot is missing');
       return 'failed';
     }
 
     const cached = await this.findCached(job.previousHash, job.currentHash);
     if (cached) {
-      await this.markDone(job.id, cached);
+      await this.markDone(job, cached);
       log.debug({ snapshotId: job.id }, 'summary served from cache');
       return 'done';
     }
 
+    let summary: string;
     try {
-      const summary = await llm.complete(
+      summary = await llm.complete(
         buildSummaryMessages(job.previous, job.current, job.changedFields),
       );
-      await this.markDone(job.id, summary);
-      await this.cache(job.previousHash, job.currentHash, summary);
-      return 'done';
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const retryable = !(err instanceof LlmError) || err.retryable;
-      if (!retryable || job.attempts >= this.options.maxAttempts) {
-        await this.markFailed(job.id, message);
-        log.warn({ snapshotId: job.id, attempts: job.attempts, err }, 'summary failed for good');
-        return 'failed';
-      }
-      await this.scheduleRetry(job, message);
-      log.warn({ snapshotId: job.id, attempts: job.attempts, err }, 'summary failed; will retry');
-      return 'retrying';
+      return this.handleLlmFailure(job, err);
     }
+
+    // Database writes stay outside the LLM error handling: a failed write must not be
+    // mistaken for a failed (and billed) LLM call and trigger another one.
+    await this.markDone(job, summary);
+    try {
+      await this.cache(job.previousHash, job.currentHash, summary);
+    } catch (err) {
+      log.warn({ snapshotId: job.id, err }, 'could not cache summary');
+    }
+    return 'done';
+  }
+
+  private async handleLlmFailure(job: SummaryJob, err: unknown): Promise<Outcome> {
+    const { log, maxAttempts } = this.options;
+    const message = err instanceof Error ? err.message : String(err);
+    const retryable = !(err instanceof LlmError) || err.retryable;
+    if (!retryable || job.attempts >= maxAttempts) {
+      await this.markFailed(job, message);
+      log.warn({ snapshotId: job.id, attempts: job.attempts, err }, 'summary failed for good');
+      return 'failed';
+    }
+    await this.scheduleRetry(job, message);
+    log.warn({ snapshotId: job.id, attempts: job.attempts, err }, 'summary failed; will retry');
+    return 'retrying';
   }
 
   private async findCached(fromHash: string, toHash: string): Promise<string | undefined> {
@@ -191,29 +206,29 @@ export class SummaryWorker {
       .execute();
   }
 
-  // Every update is guarded by `summary_status = 'pending'` so a late finisher can never
-  // overwrite a job that was already completed by someone else.
-
-  private async markDone(id: number, summary: string): Promise<void> {
-    await this.options.db
+  /** Updates the job only if we still own it: still pending and not re-claimed since. */
+  private updateOwnedJob(job: SummaryJob) {
+    return this.options.db
       .updateTable('snapshots')
+      .where('id', '=', job.id)
+      .where('summary_status', '=', 'pending')
+      .where('summary_attempts', '=', job.attempts);
+  }
+
+  private async markDone(job: SummaryJob, summary: string): Promise<void> {
+    await this.updateOwnedJob(job)
       .set({
         summary,
         summary_status: 'done',
         summary_error: null,
         summary_next_attempt_at: null,
       })
-      .where('id', '=', id)
-      .where('summary_status', '=', 'pending')
       .execute();
   }
 
-  private async markFailed(id: number, error: string): Promise<void> {
-    await this.options.db
-      .updateTable('snapshots')
+  private async markFailed(job: SummaryJob, error: string): Promise<void> {
+    await this.updateOwnedJob(job)
       .set({ summary_status: 'failed', summary_error: error, summary_next_attempt_at: null })
-      .where('id', '=', id)
-      .where('summary_status', '=', 'pending')
       .execute();
   }
 
@@ -223,14 +238,11 @@ export class SummaryWorker {
       maxMs: this.options.retryMaxMs,
       random: this.options.random,
     });
-    await this.options.db
-      .updateTable('snapshots')
+    await this.updateOwnedJob(job)
       .set({
         summary_error: error,
         summary_next_attempt_at: sql<Date>`now() + make_interval(secs => ${delay / 1000}::float8)`,
       })
-      .where('id', '=', job.id)
-      .where('summary_status', '=', 'pending')
       .execute();
   }
 }
