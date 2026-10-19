@@ -232,7 +232,10 @@ export const competitorRoutes: FastifyPluginAsync<CompetitorRoutesOptions> = asy
       }
 
       onPollRequested?.();
-      return reply.code(202).send({ id, status: 'queued' });
+      // Tells the client how long until it may ask again, so it can show a countdown.
+      return reply
+        .code(202)
+        .send({ id, status: 'queued', retryAfterSeconds: manualPollCooldownSeconds });
     },
   );
 };

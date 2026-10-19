@@ -271,6 +271,7 @@ describe('competitors API', () => {
       const res = await app.inject({ method: 'POST', url: '/api/competitors/acme-crm/poll' });
 
       expect(res.statusCode).toBe(202);
+      expect(res.json()).toEqual({ id: 'acme-crm', status: 'queued', retryAfterSeconds: 10 });
       const row = await db
         .selectFrom('competitors')
         .select('next_poll_at')

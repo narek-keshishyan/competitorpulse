@@ -20,8 +20,28 @@ function Timeline({ id }: { id: string }) {
   const [notTracked, setNotTracked] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const pollNowTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // The server rate limits "Poll now" per competitor; mirror it with a countdown.
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  const cooldownSeconds = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
 
   useEffect(() => () => clearTimeout(pollNowTimer.current), []);
+
+  useEffect(() => {
+    if (cooldownUntil === 0) return;
+    const ticker = setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= cooldownUntil) clearInterval(ticker);
+    }, 250);
+    return () => clearInterval(ticker);
+  }, [cooldownUntil]);
+
+  function startCooldown(seconds: number) {
+    const start = Date.now();
+    setNow(start);
+    setCooldownUntil(start + seconds * 1000);
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -51,11 +71,18 @@ function Timeline({ id }: { id: string }) {
 
   async function pollNow() {
     try {
-      await api.pollNow(id);
+      const accepted = await api.pollNow(id);
+      setError(null);
+      startCooldown(accepted.retryAfterSeconds);
       // Give the poller a moment to fetch, then refresh instead of waiting for the next tick.
       clearTimeout(pollNowTimer.current);
       pollNowTimer.current = setTimeout(() => setRefreshKey((k) => k + 1), 1_000);
     } catch (err) {
+      if (err instanceof ApiRequestError && err.status === 429 && err.retryAfterSeconds) {
+        // Polled moments ago (another tab, another person): just wait, it's not an error.
+        startCooldown(err.retryAfterSeconds);
+        return;
+      }
       setError((err as Error).message);
     }
   }
@@ -67,8 +94,8 @@ function Timeline({ id }: { id: string }) {
           ← Back to competitors
         </Link>
         {!notTracked && (
-          <button type="button" onClick={() => void pollNow()}>
-            Poll now
+          <button type="button" onClick={() => void pollNow()} disabled={cooldownSeconds > 0}>
+            {cooldownSeconds > 0 ? `Poll again in ${cooldownSeconds}s` : 'Poll now'}
           </button>
         )}
       </div>

@@ -52,6 +52,13 @@ export interface CreateCompetitorRequest {
   id: string;
 }
 
+export interface PollRequestAccepted {
+  id: string;
+  status: 'queued';
+  /** Seconds until another "Poll now" for this competitor will be accepted. */
+  retryAfterSeconds: number;
+}
+
 export interface ApiError {
   error: string;
   message: string;

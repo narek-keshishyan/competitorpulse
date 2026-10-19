@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { Snapshot } from '@competitorpulse/shared';
 import { CompetitorTimeline } from '../src/pages/CompetitorTimeline';
@@ -86,6 +87,38 @@ describe('CompetitorTimeline', () => {
     const card = await screen.findByRole('article');
     const highlighted = [...card.querySelectorAll('mark.changed')].map((m) => m.textContent);
     expect(highlighted).toEqual(['$29/mo']);
+  });
+
+  it('counts down after Poll now until the server accepts another one', async () => {
+    mockFetch({
+      'GET /api/competitors/acme-crm/snapshots': () => ({ body: [base] }),
+      'POST /api/competitors/acme-crm/poll': () => ({
+        status: 202,
+        body: { id: 'acme-crm', status: 'queued', retryAfterSeconds: 10 },
+      }),
+    });
+    renderTimeline();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Poll now' }));
+
+    const button = await screen.findByRole('button', { name: /Poll again in (10|9)s/ });
+    expect(button).toBeDisabled();
+  });
+
+  it('treats a cooldown answer as a wait, not an error', async () => {
+    mockFetch({
+      'GET /api/competitors/acme-crm/snapshots': () => ({ body: [base] }),
+      'POST /api/competitors/acme-crm/poll': () => ({
+        status: 429,
+        body: { error: 'too_many_requests', message: 'wait', retryAfterSeconds: 6 },
+      }),
+    });
+    renderTimeline();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Poll now' }));
+
+    expect(await screen.findByRole('button', { name: /Poll again in [56]s/ })).toBeDisabled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('explains when the competitor is not tracked', async () => {

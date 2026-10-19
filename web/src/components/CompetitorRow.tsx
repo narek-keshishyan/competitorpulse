@@ -13,7 +13,8 @@ function PollStatus({ competitor, now }: { competitor: Competitor; now: number }
   if (!competitor.lastPolledAt) {
     return <span className="muted">Waiting for the first check…</span>;
   }
-  const nextIsDue = new Date(competitor.nextPollAt).getTime() <= now;
+  // Within a few seconds it's effectively due: avoid "next check just now".
+  const nextIsDue = new Date(competitor.nextPollAt).getTime() - now < 5_000;
   return (
     <span className="muted">
       Checked {formatRelative(competitor.lastPolledAt, now)} · next check{' '}
