@@ -11,7 +11,8 @@ describe('OpenAiCompatibleClient', () => {
   let lastRequest: { headers: Record<string, unknown>; body: Record<string, unknown> } | undefined;
 
   beforeAll(async () => {
-    server = Fastify();
+    // Close sockets left open by aborted (timed-out) requests so teardown is instant.
+    server = Fastify({ forceCloseConnections: true });
     server.post('/v1/chat/completions', async (request, reply) => {
       lastRequest = {
         headers: request.headers,

@@ -14,7 +14,8 @@ describe('HttpListingSource', () => {
   let baseUrl: string;
 
   beforeAll(async () => {
-    app = Fastify();
+    // Close sockets left open by aborted (timed-out) requests so teardown is instant.
+    app = Fastify({ forceCloseConnections: true });
     await app.register(listingStubRoutes, {
       prefix: '/stub',
       stub: new ListingStub({ acme: [listing] }),
