@@ -211,8 +211,10 @@ it would reach a real site. Pointing `LISTING_SOURCE_URL` somewhere else swaps i
 | Local (docker compose, tests) | The provided mock server (`mock-llm/`), no key needed.  |
 | Deployed instance             | A real provider through its OpenAI-compatible endpoint. |
 
-The client speaks the OpenAI Chat Completions format with plain `fetch`, so any compatible
-endpoint works. Configure it with three variables:
+The client uses the official `openai` SDK with a configurable `baseURL`, so any
+OpenAI-compatible endpoint works. The SDK's built-in retries are turned off
+(`maxRetries: 0`): the summary worker owns retrying, so one attempt in the database is
+exactly one billed request. Configure it with three variables:
 
 | Provider       | `LLM_BASE_URL`                 | `LLM_MODEL` (example) |
 | -------------- | ------------------------------ | --------------------- |

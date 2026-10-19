@@ -9,11 +9,13 @@ describe('OpenAiCompatibleClient', () => {
   let baseUrl: string;
   let behaviour: Behaviour;
   let lastRequest: { headers: Record<string, unknown>; body: Record<string, unknown> } | undefined;
+  let requestCount = 0;
 
   beforeAll(async () => {
     // Close sockets left open by aborted (timed-out) requests so teardown is instant.
     server = Fastify({ forceCloseConnections: true });
     server.post('/v1/chat/completions', async (request, reply) => {
+      requestCount += 1;
       lastRequest = {
         headers: request.headers,
         body: request.body as Record<string, unknown>,
@@ -26,6 +28,7 @@ describe('OpenAiCompatibleClient', () => {
 
   beforeEach(() => {
     lastRequest = undefined;
+    requestCount = 0;
     behaviour = {
       status: 200,
       body: { choices: [{ message: { role: 'assistant', content: '  Price dropped.  ' } }] },
@@ -59,6 +62,15 @@ describe('OpenAiCompatibleClient', () => {
 
     expect(err).toBeInstanceOf(LlmError);
     expect(err).toMatchObject({ retryable: true, status: 500 });
+  });
+
+  it('leaves retrying to the worker: one attempt is exactly one request', async () => {
+    behaviour = { status: 503, body: {} };
+
+    await expect(client().complete([{ role: 'user', content: 'hi' }])).rejects.toBeInstanceOf(
+      LlmError,
+    );
+    expect(requestCount).toBe(1);
   });
 
   it('treats rate limiting as retryable', async () => {
