@@ -116,15 +116,16 @@ GET    /api/competitors/:id/snapshots    -> 200 [Snapshot, ...]   newest first
 
 Additions beyond the contract:
 
-| Endpoint                         | Purpose                                                                        |
-| -------------------------------- | ------------------------------------------------------------------------------ |
-| `GET /api/catalog`               | Every id the listing source knows, flagged `tracked`. Powers the suggestions.  |
-| Scheduler fields on competitors  | `createdAt`, `lastPolledAt`, `nextPollAt`, `consecutiveFailures`, `lastError`. |
-| `POST /api/competitors/:id/poll` | Makes a competitor due now (202). Limited per competitor; see below.           |
-| `GET .../snapshots?limit=N`      | Page size, default 100, max 500.                                               |
-| `GET /healthz`, `GET /readyz`    | Liveness (process up) and readiness (database reachable).                      |
-| `GET /stub/listings[/:id]`       | The listing stub (see below).                                                  |
-| `POST /stub/reset` `{ "id"? }`   | Rewinds the stub so a demo can be replayed from version 1.                     |
+| Endpoint                            | Purpose                                                                                                                                     |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/catalog`                  | Every id the listing source knows, flagged `tracked`. Powers the suggestions.                                                               |
+| Scheduler fields on competitors     | `createdAt`, `lastPolledAt`, `nextPollAt`, `consecutiveFailures`, `lastError`.                                                              |
+| `POST /api/competitors/:id/poll`    | Makes a competitor due now (202). Limited per competitor; see below.                                                                        |
+| `GET /api/competitors/:id/timeline` | The history grouped for display: each change (and the first snapshot) with the number of unchanged checks that followed it. Used by the UI. |
+| `GET .../snapshots?limit=N`         | Page size, default 100, max 500.                                                                                                            |
+| `GET /healthz`, `GET /readyz`       | Liveness (process up) and readiness (database reachable).                                                                                   |
+| `GET /stub/listings[/:id]`          | The listing stub (see below).                                                                                                               |
+| `POST /stub/reset` `{ "id"? }`      | Rewinds the stub so a demo can be replayed from version 1.                                                                                  |
 
 Errors are JSON `{ "error": "<code>", "message": "..." }`. `POST /api/competitors` returns
 400 for a malformed id (lowercase letters, digits and dashes), 409 if it is already tracked,
@@ -275,6 +276,12 @@ A small React app with two views, served by the API in production:
   - **Snapshots:** newest first, with fetch time, listing fields and the AI summary. A
     snapshot can also show "Summarizing…", "summary could not be generated" or "No change
     since previous snapshot."
+  - **Unchanged runs collapsed:** polling every minute produces hundreds of identical
+    snapshots, which would push the few real changes out of view. The timeline shows each
+    change once, followed by a single line such as "No change in 143 checks · last checked
+    14:28". Every fetch is still stored; only the display is grouped.
+    - **How:** `GET /api/competitors/:id/timeline` groups the snapshots in SQL. A running
+      count of changed snapshots numbers the groups ("gaps and islands").
   - **Highlighting:** fields that changed are highlighted.
   - **Freshness:** the page refreshes every 5 s, and **Poll now** fetches immediately. The
     button then counts down until the server accepts another request.
