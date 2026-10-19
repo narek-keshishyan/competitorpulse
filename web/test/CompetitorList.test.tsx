@@ -59,38 +59,92 @@ describe('CompetitorList', () => {
     expect(screen.getByLabelText('Competitor id')).toHaveValue('');
   });
 
-  it('suggests competitors that are not tracked yet', async () => {
+  const catalogRoute = () => ({
+    body: [
+      { id: 'acme-crm', tracked: true },
+      { id: 'ferry-pay', tracked: false },
+      { id: 'north-analytics', tracked: false },
+    ],
+  });
+  const optionNames = () => screen.queryAllByRole('option').map((o) => o.textContent);
+
+  it('suggests matching competitors that are not tracked yet while typing', async () => {
+    mockFetch({
+      'GET /api/competitors': () => ({ body: [competitor('acme-crm')] }),
+      'GET /api/catalog': catalogRoute,
+    });
+    renderList();
+    const input = screen.getByRole('combobox', { name: 'Competitor id' });
+    await screen.findByRole('link', { name: 'acme-crm' });
+
+    await userEvent.type(input, 'a');
+    expect(optionNames()).toEqual(['ferry-pay', 'north-analytics']);
+
+    await userEvent.type(input, 'nal');
+    expect(optionNames()).toEqual(['north-analytics']);
+
+    await userEvent.click(screen.getByRole('option', { name: 'north-analytics' }));
+    expect(input).toHaveValue('north-analytics');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('picks a suggestion with the keyboard without submitting the form', async () => {
+    const fetchMock = mockFetch({
+      'GET /api/competitors': () => ({ body: [] }),
+      'GET /api/catalog': catalogRoute,
+    });
+    renderList();
+    const input = screen.getByRole('combobox', { name: 'Competitor id' });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/catalog', expect.anything()));
+
+    await userEvent.type(input, 'ferr');
+    await userEvent.keyboard('{ArrowDown}');
+    expect(screen.getByRole('option', { name: 'ferry-pay' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await userEvent.keyboard('{Enter}');
+
+    expect(input).toHaveValue('ferry-pay');
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/competitors',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('says when nothing matches what was typed', async () => {
+    mockFetch({
+      'GET /api/competitors': () => ({ body: [] }),
+      'GET /api/catalog': catalogRoute,
+    });
+    renderList();
+
+    await userEvent.type(screen.getByRole('combobox', { name: 'Competitor id' }), 'zzz');
+
+    expect(screen.getByText('No untracked competitor matches “zzz”')).toBeInTheDocument();
+    expect(optionNames()).toEqual([]);
+  });
+
+  it('stops suggesting a competitor once it is tracked', async () => {
     let tracked = [competitor('acme-crm')];
     mockFetch({
       'GET /api/competitors': () => ({ body: tracked }),
-      'GET /api/catalog': () => ({
-        body: [
-          { id: 'acme-crm', tracked: true },
-          { id: 'ferry-pay', tracked: false },
-          { id: 'north-analytics', tracked: false },
-        ],
-      }),
+      'GET /api/catalog': catalogRoute,
       'POST /api/competitors': () => {
         tracked = [...tracked, competitor('ferry-pay')];
         return { status: 201, body: tracked[1] };
       },
     });
-    const { container } = renderList();
-    const suggestions = () =>
-      [...container.querySelectorAll('#competitor-suggestions option')].map((o) =>
-        o.getAttribute('value'),
-      );
+    renderList();
+    const input = screen.getByRole('combobox', { name: 'Competitor id' });
+    await screen.findByRole('link', { name: 'acme-crm' });
 
-    expect(screen.getByLabelText('Competitor id')).toHaveAttribute(
-      'list',
-      'competitor-suggestions',
-    );
-    await waitFor(() => expect(suggestions()).toEqual(['ferry-pay', 'north-analytics']));
-
-    await userEvent.type(screen.getByLabelText('Competitor id'), 'ferry-pay');
+    await userEvent.type(input, 'ferry-pay');
     await userEvent.click(screen.getByRole('button', { name: 'Track' }));
+    await screen.findByRole('link', { name: 'ferry-pay' });
+    await userEvent.type(input, 'a');
 
-    await waitFor(() => expect(suggestions()).toEqual(['north-analytics']));
+    expect(optionNames()).toEqual(['north-analytics']);
   });
 
   it('still lets you type an id when the catalog is unavailable', async () => {

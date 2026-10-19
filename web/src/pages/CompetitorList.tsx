@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { CatalogEntry, Competitor } from '@competitorpulse/shared';
 import { api } from '../api';
+import { Combobox } from '../components/Combobox';
 import { CompetitorRow } from '../components/CompetitorRow';
 
 /** Keeps the scheduler status of each competitor current. */
@@ -81,19 +82,13 @@ export function CompetitorList() {
   return (
     <section>
       <form className="track-form" onSubmit={track}>
-        <input
-          aria-label="Competitor id"
+        <Combobox
+          label="Competitor id"
           placeholder="competitor id, e.g. acme-crm"
-          list="competitor-suggestions"
-          autoComplete="off"
           value={newId}
-          onChange={(e) => setNewId(e.target.value)}
+          onChange={setNewId}
+          options={suggestions}
         />
-        <datalist id="competitor-suggestions">
-          {suggestions.map((id) => (
-            <option key={id} value={id} />
-          ))}
-        </datalist>
         <button type="submit" disabled={busy || newId.trim() === ''}>
           Track
         </button>

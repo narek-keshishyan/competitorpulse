@@ -49,6 +49,42 @@ button:disabled {
   margin-bottom: 16px;
 }
 
+.combobox {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+
+.combobox-list {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #999;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 12%);
+}
+
+.combobox-list li {
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.combobox-list li.active,
+.combobox-list li[role='option']:hover {
+  background: #e8efff;
+}
+
+.combobox-list li.combobox-empty {
+  color: #666;
+  cursor: default;
+}
+
 .track-form input {
   flex: 1;
   font: inherit;
