@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { Snapshot } from '@competitorpulse/shared';
 import { api, ApiRequestError } from '../api';
@@ -9,10 +9,19 @@ export const REFRESH_INTERVAL_MS = 5_000;
 
 export function CompetitorTimeline() {
   const { id = '' } = useParams();
+  // Keyed by id so switching competitors starts from a clean state instead of briefly
+  // showing the previous competitor's snapshots.
+  return <Timeline key={id} id={id} />;
+}
+
+function Timeline({ id }: { id: string }) {
   const [snapshots, setSnapshots] = useState<Snapshot[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notTracked, setNotTracked] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const pollNowTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(pollNowTimer.current), []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -43,7 +52,9 @@ export function CompetitorTimeline() {
   async function pollNow() {
     try {
       await api.pollNow(id);
-      setTimeout(() => setRefreshKey((k) => k + 1), 1_000);
+      // Give the poller a moment to fetch, then refresh instead of waiting for the next tick.
+      clearTimeout(pollNowTimer.current);
+      pollNowTimer.current = setTimeout(() => setRefreshKey((k) => k + 1), 1_000);
     } catch (err) {
       setError((err as Error).message);
     }
