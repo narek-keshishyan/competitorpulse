@@ -90,6 +90,7 @@ Additions beyond the contract:
 
 | Endpoint                         | Purpose                                                          |
 | -------------------------------- | ---------------------------------------------------------------- |
+| `createdAt` on competitors       | When tracking started.                                           |
 | `POST /api/competitors/:id/poll` | Makes a competitor due now (202). Used by the "Poll now" button. |
 | `GET .../snapshots?limit=N`      | Page size, default 100, max 500.                                 |
 | `GET /healthz`, `GET /readyz`    | Liveness (process up) and readiness (database reachable).        |
@@ -148,8 +149,11 @@ RETURNING id
 - **Failure backoff.** A failed fetch writes no snapshot. The competitor is retried after
   15 s, 30 s, 60 s and so on, capped at the normal interval, and the error is stored on the
   row.
-- **Durable schedule.** The schedule lives in the database, so restarts and deploys don't
-  lose or duplicate work.
+- **Durable schedule.** The schedule lives in the database, so a restart never duplicates
+  work. On deploy the process gets `SIGTERM`, stops claiming, and has 60 s to finish the
+  in-flight polls and LLM calls.
+- **One clock.** Every scheduling comparison and every `fetched_at` uses the database clock,
+  so clock skew between instances can't reorder the timeline.
 - **Scale.** At the scale in the brief (a few hundred competitors every 15 minutes) this
   works out to about 0.3 fetches per second, which a single instance handles easily. The
   `WORKERS_ENABLED=false` flag lets you run API-only replicas if the API ever needs to scale
@@ -173,8 +177,12 @@ The LLM call is deliberately not on the polling path:
 1. **Save first.** The poller commits the snapshot first. If it changed, it's stored with
    `summary_status = 'pending'`.
 2. **Claim pending jobs.** A separate summary worker loop claims pending snapshots with the
-   same `SKIP LOCKED` pattern. Each claim takes a lease, so if the process dies mid-call,
-   the job comes back after the lease expires.
+   same `SKIP LOCKED` pattern, but only as many as it calls in parallel (`LLM_CONCURRENCY`).
+   - **Lease.** Each claim takes a lease, so if the process dies mid-call, the job comes
+     back after the lease expires.
+   - **Fencing.** The claim bumps the attempt counter, and every later write requires that
+     number. A worker whose lease ran out can never overwrite the result of the worker that
+     took over.
 3. **Build the prompt.** It contains the computed diff (`price: "$39/mo" -> "$29/mo"`)
    followed by both full listings. The model is told to treat the listing text as untrusted
    data.
@@ -222,23 +230,28 @@ once the mock recovers.
 
 All configuration comes from environment variables, validated at startup.
 
-| Variable                                         | Default                       | Notes                                          |
-| ------------------------------------------------ | ----------------------------- | ---------------------------------------------- |
-| `DATABASE_URL`                                   | (required)                    | Postgres connection string                     |
-| `DATABASE_SSL`                                   | `false`                       | `true` for hosted Postgres (Supabase)          |
-| `PORT`                                           | `3000`                        |                                                |
-| `POLL_INTERVAL_SECONDS`                          | `60`                          | Per-competitor polling interval                |
-| `POLL_TICK_MS`                                   | `5000`                        | How often the poller looks for due competitors |
-| `POLL_BATCH_SIZE` / `POLL_CONCURRENCY`           | `50` / `10`                   |                                                |
-| `LISTING_SOURCE_URL`                             | `http://127.0.0.1:$PORT/stub` |                                                |
-| `LISTING_FETCH_TIMEOUT_MS`                       | `5000`                        |                                                |
-| `ENABLE_STUB`                                    | `true`                        | Serve the fixture-backed stub                  |
-| `WORKERS_ENABLED`                                | `true`                        | `false` for API-only replicas                  |
-| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`     | mock server                   | See [LLM](#llm)                                |
-| `LLM_TIMEOUT_MS`                                 | `15000`                       |                                                |
-| `LLM_MAX_ATTEMPTS`                               | `5`                           |                                                |
-| `LLM_CONCURRENCY`                                | `4`                           | Parallel LLM calls                             |
-| `SUMMARY_RETRY_BASE_MS` / `SUMMARY_RETRY_MAX_MS` | `5000` / `300000`             | Retry backoff                                  |
+| Variable                                         | Default                                  | Notes                                                  |
+| ------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------ |
+| `DATABASE_URL`                                   | (required)                               | Postgres connection string                             |
+| `DATABASE_SSL`                                   | `false`                                  | `true` for hosted Postgres (Supabase)                  |
+| `DATABASE_SSL_CA`                                |                                          | PEM of the server CA; enables certificate verification |
+| `DATABASE_POOL_MAX`                              | `10`                                     |                                                        |
+| `HOST` / `PORT`                                  | `0.0.0.0` / `3000`                       |                                                        |
+| `LOG_LEVEL`                                      | `info`                                   |                                                        |
+| `POLL_INTERVAL_SECONDS`                          | `60`                                     | Per-competitor polling interval                        |
+| `POLL_TICK_MS`                                   | `5000`                                   | How often the poller looks for due competitors         |
+| `POLL_BATCH_SIZE` / `POLL_CONCURRENCY`           | `50` / `10`                              |                                                        |
+| `LISTING_SOURCE_URL`                             | `http://127.0.0.1:$PORT/stub`            |                                                        |
+| `LISTING_FETCH_TIMEOUT_MS`                       | `5000`                                   |                                                        |
+| `ENABLE_STUB` / `LISTING_FIXTURES_PATH`          | `true` / `server/fixtures/listings.json` | The fixture-backed stub                                |
+| `WORKERS_ENABLED`                                | `true`                                   | `false` for API-only replicas                          |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`     | mock server                              | See [LLM](#llm)                                        |
+| `LLM_TIMEOUT_MS`                                 | `15000`                                  |                                                        |
+| `LLM_MAX_ATTEMPTS`                               | `5`                                      |                                                        |
+| `LLM_CONCURRENCY`                                | `4`                                      | Parallel LLM calls (and jobs claimed per run)          |
+| `SUMMARY_TICK_MS`                                | `3000`                                   | How often the summary worker looks for pending jobs    |
+| `SUMMARY_RETRY_BASE_MS` / `SUMMARY_RETRY_MAX_MS` | `5000` / `300000`                        | Retry backoff                                          |
+| `WEB_DIST_DIR`                                   |                                          | Built web app to serve (set in the Docker image)       |
 
 ## Deployment
 
@@ -279,7 +292,9 @@ fly deploy -a <app-name> --ha=false
 - **The summary cache can miss within a batch.** Two identical transitions summarized in the
   same batch may both call the LLM. The cache prevents repeats across batches, which covers
   the realistic case.
-- **No auth**, per the brief: a single internal user.
+- **No auth**, per the brief: a single internal user. This includes the stub's
+  `/stub/reset`, which is reachable on the demo deployment on purpose so a demo can be
+  replayed. `ENABLE_STUB=false` removes it.
 
 ## What I'd add for production
 
