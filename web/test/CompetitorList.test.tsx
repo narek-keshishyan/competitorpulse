@@ -136,7 +136,7 @@ describe('CompetitorList', () => {
     renderList();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Remove acme-crm' }));
-    expect(screen.getByText('Remove acme-crm and its history?')).toBeInTheDocument();
+    expect(screen.getByText('Delete with history?')).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(
       '/api/competitors/acme-crm',
       expect.objectContaining({ method: 'DELETE' }),
@@ -155,7 +155,7 @@ describe('CompetitorList', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(screen.getByRole('link', { name: 'acme-crm' })).toBeInTheDocument();
-    expect(screen.queryByText(/and its history\?/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Delete with history?')).not.toBeInTheDocument();
   });
 
   it('shows when each competitor was checked and when it is checked next', async () => {

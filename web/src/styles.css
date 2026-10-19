@@ -97,6 +97,10 @@ button:disabled {
   font-size: 0.875rem;
 }
 
+.confirm-question {
+  white-space: nowrap;
+}
+
 button.danger {
   border-color: #b00020;
   background: #b00020;

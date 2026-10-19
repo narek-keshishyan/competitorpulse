@@ -43,7 +43,7 @@ export function CompetitorRow({ competitor, now, onRemove }: Props) {
       {/* Removing deletes the whole history, so it takes a second, explicit click. */}
       {confirming ? (
         <div className="confirm">
-          <span>Remove {id} and its history?</span>
+          <span className="confirm-question">Delete with history?</span>
           <button
             type="button"
             className="danger"
