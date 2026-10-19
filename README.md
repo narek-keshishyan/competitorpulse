@@ -16,8 +16,21 @@ explain the change in plain English ("Price dropped from $39/mo to $29/mo").
 docker compose up --build
 ```
 
-Then open http://localhost:3000, track `acme-crm`, open it, and click **Poll now** a few
-times (or wait: competitors are polled every 30 s in this setup).
+Then open http://localhost:3000, start typing in the input and pick a competitor (for
+example `acme-crm`), click **Track**, open it, and click **Poll now** a few times. You can
+also just wait: competitors are polled every 30 s in this setup.
+
+The listing source knows exactly three competitors, taken from the provided fixture
+[`server/fixtures/listings.json`](server/fixtures/listings.json):
+
+| Competitor id     | Product         |
+| ----------------- | --------------- |
+| `acme-crm`        | Acme CRM        |
+| `north-analytics` | North Analytics |
+| `ferry-pay`       | FerryPay        |
+
+Each has four listing versions. The UI suggests these ids as you type, and
+`GET /api/catalog` lists them.
 
 This starts Postgres, the mock LLM server and the app. The app applies migrations on start.
 
@@ -90,6 +103,7 @@ Additions beyond the contract:
 
 | Endpoint                         | Purpose                                                                        |
 | -------------------------------- | ------------------------------------------------------------------------------ |
+| `GET /api/catalog`               | Every id the listing source knows, flagged `tracked`. Powers the suggestions.  |
 | Scheduler fields on competitors  | `createdAt`, `lastPolledAt`, `nextPollAt`, `consecutiveFailures`, `lastError`. |
 | `POST /api/competitors/:id/poll` | Makes a competitor due now (202). Used by the "Poll now" button.               |
 | `GET .../snapshots?limit=N`      | Page size, default 100, max 500.                                               |
@@ -201,10 +215,29 @@ LLM call at all, which you can check with the mock server's `GET /control/stats`
 
 ### Listing source stub
 
-`fixtures/listings.json` is served by an in-process stub at `/stub/listings/:id`. Each call
+`server/fixtures/listings.json` is served by an in-process stub at `/stub/listings/:id`. Each call
 returns the next version and repeats the last one once the sequence runs out. The poller
 reaches it through a small HTTP client, with a timeout and response validation, exactly as
 it would reach a real site. Pointing `LISTING_SOURCE_URL` somewhere else swaps it out.
+
+### Frontend
+
+A small React app with two views, served by the API in production:
+
+- **Competitor list**
+  - **Add:** the input suggests untracked competitor ids as you type. It's a small,
+    hand-built combobox following the WAI-ARIA pattern (keyboard and screen reader
+    friendly), because the native `<datalist>` dropdown doesn't render in every browser.
+  - **Status:** each row shows "checked 20 s ago · next check in 40 s", plus a red badge with
+    the last error while fetches are failing.
+  - **Remove:** asks for confirmation first, because it deletes the history.
+  - **Freshness:** the list refreshes every 10 s.
+- **Timeline**
+  - **Snapshots:** newest first, with fetch time, listing fields and the AI summary. A
+    snapshot can also show "Summarizing…", "summary could not be generated" or "No change
+    since previous snapshot."
+  - **Highlighting:** fields that changed are highlighted.
+  - **Freshness:** the page refreshes every 5 s, and **Poll now** fetches immediately.
 
 ## LLM
 
@@ -267,6 +300,9 @@ The live instance at **https://competitorpulse.fly.dev** runs on **Fly.io** with
   because the scheduler has to keep running.
 - **Migrations.** They run as Fly's `release_command` before each new version starts.
 - **Database.** Supabase Postgres, reached through the session pooler with TLS.
+  - **Row level security.** A migration enables RLS with no policies on every table, so
+    Supabase's auto-generated public REST API can't read or write them. The app connects
+    as the table owner, which RLS doesn't restrict.
 - **Secrets.** `DATABASE_URL` and the `LLM_*` variables are Fly secrets. The deployed
   instance polls every 60 s so a reviewer sees all four versions within a few minutes.
 
