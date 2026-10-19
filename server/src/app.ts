@@ -49,7 +49,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     await app.register(fastifyStatic, { root: options.webDistDir, wildcard: false });
   }
 
-  await app.register(healthRoutes, { db: options.db });
+  // Health probes and the stub are hit constantly by machines; keep them out of the info logs.
+  await app.register(healthRoutes, { db: options.db, logLevel: 'warn' });
   await app.register(competitorRoutes, {
     prefix: '/api',
     db: options.db,
@@ -57,7 +58,11 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     onPollRequested: options.onPollRequested,
   });
   if (options.stub) {
-    await app.register(listingStubRoutes, { prefix: '/stub', stub: options.stub });
+    await app.register(listingStubRoutes, {
+      prefix: '/stub',
+      stub: options.stub,
+      logLevel: 'warn',
+    });
   }
 
   return app;
