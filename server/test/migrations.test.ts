@@ -25,6 +25,16 @@ describe('migrations', () => {
     expect(rows.map((r) => r.table_name)).toEqual(['competitors', 'snapshots', 'summary_cache']);
   });
 
+  it('enables row level security on every table', async () => {
+    const { rows } = await sql<{ relname: string; relrowsecurity: boolean }>`
+      select relname, relrowsecurity from pg_class
+      where relnamespace = 'public'::regnamespace and relkind = 'r'
+    `.execute(db);
+
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.filter((r) => !r.relrowsecurity)).toEqual([]);
+  });
+
   it('is idempotent', async () => {
     await expect(migrateToLatest(db)).resolves.toEqual([]);
   });

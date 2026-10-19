@@ -1,11 +1,13 @@
 import type { Kysely } from 'kysely';
 import { Migrator, type Migration, type MigrationProvider } from 'kysely/migration';
 import * as m0001 from './migrations/0001_initial.js';
+import * as m0002 from './migrations/0002_enable_row_level_security.js';
 
 // Migrations are imported explicitly rather than read from disk, so they work the same
 // from TypeScript sources, compiled output and inside the container image.
 const migrations: Record<string, Migration> = {
   '0001_initial': m0001,
+  '0002_enable_row_level_security': m0002,
 };
 
 const provider: MigrationProvider = {
