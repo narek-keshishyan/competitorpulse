@@ -1,0 +1,39 @@
+# Fly.io config for the app (API + web UI + background workers).
+# Secrets (not in this file): DATABASE_URL, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL.
+app = 'competitorpulse'
+primary_region = 'iad'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[deploy]
+  # Runs in a temporary machine with the new image before it goes live.
+  release_command = 'node dist/scripts/migrate.js'
+  strategy = 'immediate'
+
+[env]
+  NODE_ENV = 'production'
+  DATABASE_SSL = 'true'
+  DATABASE_POOL_MAX = '5'
+  # Short so reviewers see every listing version within minutes; production would use 900.
+  POLL_INTERVAL_SECONDS = '60'
+  LOG_LEVEL = 'info'
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # The scheduler lives in this process, so the machine must never be stopped for idling.
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = '15s'
+    interval = '30s'
+    method = 'GET'
+    path = '/readyz'
+    timeout = '5s'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'
