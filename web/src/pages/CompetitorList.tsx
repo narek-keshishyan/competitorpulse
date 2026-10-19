@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { Competitor } from '@competitorpulse/shared';
+import type { CatalogEntry, Competitor } from '@competitorpulse/shared';
 import { api } from '../api';
 
 export function CompetitorList() {
   const [competitors, setCompetitors] = useState<Competitor[] | null>(null);
+  const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [newId, setNewId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,10 +24,19 @@ export function CompetitorList() {
       (list) => !cancelled && setCompetitors(list),
       (err: Error) => !cancelled && setError(err.message),
     );
+    // Suggestions are a convenience: if the catalog can't be loaded the form still works.
+    api.listCatalog().then(
+      (entries) => !cancelled && setCatalog(entries),
+      () => {},
+    );
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Derived from the live list, so suggestions update right after tracking or removing.
+  const trackedIds = new Set(competitors?.map((c) => c.id));
+  const suggestions = catalog.map((entry) => entry.id).filter((id) => !trackedIds.has(id));
 
   async function track(event: FormEvent) {
     event.preventDefault();
@@ -61,9 +71,16 @@ export function CompetitorList() {
         <input
           aria-label="Competitor id"
           placeholder="competitor id, e.g. acme-crm"
+          list="competitor-suggestions"
+          autoComplete="off"
           value={newId}
           onChange={(e) => setNewId(e.target.value)}
         />
+        <datalist id="competitor-suggestions">
+          {suggestions.map((id) => (
+            <option key={id} value={id} />
+          ))}
+        </datalist>
         <button type="submit" disabled={busy || newId.trim() === ''}>
           Track
         </button>
@@ -79,8 +96,9 @@ export function CompetitorList() {
         <p className="muted">Loading…</p>
       ) : competitors.length === 0 ? (
         <p className="muted">
-          Nothing tracked yet. Try <code>acme-crm</code>, <code>north-analytics</code> or{' '}
-          <code>ferry-pay</code>.
+          Nothing tracked yet.
+          {suggestions.length > 0 &&
+            ` Start typing to pick one of ${suggestions.length} available competitors.`}
         </p>
       ) : (
         <ul className="competitor-list">

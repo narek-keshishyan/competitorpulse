@@ -1,4 +1,4 @@
-import type { ApiError, Competitor, Snapshot } from '@competitorpulse/shared';
+import type { ApiError, CatalogEntry, Competitor, Snapshot } from '@competitorpulse/shared';
 
 export class ApiRequestError extends Error {
   constructor(
@@ -30,6 +30,8 @@ const competitorPath = (id: string) => `/api/competitors/${encodeURIComponent(id
 
 export const api = {
   listCompetitors: () => request<Competitor[]>('/api/competitors'),
+
+  listCatalog: () => request<CatalogEntry[]>('/api/catalog'),
 
   addCompetitor: (id: string) =>
     request<Competitor>('/api/competitors', {

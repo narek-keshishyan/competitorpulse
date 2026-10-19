@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { CompetitorList } from '../src/pages/CompetitorList';
@@ -46,6 +46,55 @@ describe('CompetitorList', () => {
       expect.objectContaining({ body: JSON.stringify({ id: 'ferry-pay' }) }),
     );
     expect(screen.getByLabelText('Competitor id')).toHaveValue('');
+  });
+
+  it('suggests competitors that are not tracked yet', async () => {
+    let tracked = [{ id: 'acme-crm', createdAt: '' }];
+    mockFetch({
+      'GET /api/competitors': () => ({ body: tracked }),
+      'GET /api/catalog': () => ({
+        body: [
+          { id: 'acme-crm', tracked: true },
+          { id: 'ferry-pay', tracked: false },
+          { id: 'north-analytics', tracked: false },
+        ],
+      }),
+      'POST /api/competitors': () => {
+        tracked = [...tracked, { id: 'ferry-pay', createdAt: '' }];
+        return { status: 201, body: tracked[1] };
+      },
+    });
+    const { container } = renderList();
+    const suggestions = () =>
+      [...container.querySelectorAll('#competitor-suggestions option')].map((o) =>
+        o.getAttribute('value'),
+      );
+
+    expect(screen.getByLabelText('Competitor id')).toHaveAttribute(
+      'list',
+      'competitor-suggestions',
+    );
+    await waitFor(() => expect(suggestions()).toEqual(['ferry-pay', 'north-analytics']));
+
+    await userEvent.type(screen.getByLabelText('Competitor id'), 'ferry-pay');
+    await userEvent.click(screen.getByRole('button', { name: 'Track' }));
+
+    await waitFor(() => expect(suggestions()).toEqual(['north-analytics']));
+  });
+
+  it('still lets you type an id when the catalog is unavailable', async () => {
+    mockFetch({
+      'GET /api/competitors': () => ({ body: [] }),
+      'GET /api/catalog': () => ({
+        status: 503,
+        body: { error: 'source_unavailable', message: 'down' },
+      }),
+    });
+
+    renderList();
+
+    expect(await screen.findByText('Nothing tracked yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('shows the server error when tracking fails', async () => {
