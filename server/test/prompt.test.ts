@@ -15,7 +15,8 @@ describe('buildSummaryMessages', () => {
 
   it('sets the task and output constraints in the system message', () => {
     expect(system?.role).toBe('system');
-    expect(system?.content).toMatch(/one or two short sentences/i);
+    expect(system?.content).toMatch(/one short sentence/i);
+    expect(system?.content).toMatch(/never mention unchanged fields/i);
     expect(system?.content).toMatch(/untrusted/i);
   });
 

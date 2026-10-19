@@ -4,7 +4,7 @@ import type { Db } from '../db/connection.js';
 import { backoffMs } from '../lib/backoff.js';
 import type { Logger } from '../lib/logger.js';
 import { LlmError, type LlmClient } from './llm-client.js';
-import { buildSummaryMessages } from './prompt.js';
+import { buildSummaryMessages, PROMPT_VERSION } from './prompt.js';
 
 export interface SummaryWorkerOptions {
   db: Db;
@@ -193,7 +193,7 @@ export class SummaryWorker {
       .select('summary')
       .where('from_hash', '=', fromHash)
       .where('to_hash', '=', toHash)
-      .where('model', '=', this.options.llm.model)
+      .where('model', '=', this.cacheModelKey())
       .executeTakeFirst();
     return row?.summary;
   }
@@ -201,9 +201,14 @@ export class SummaryWorker {
   private async cache(fromHash: string, toHash: string, summary: string): Promise<void> {
     await this.options.db
       .insertInto('summary_cache')
-      .values({ from_hash: fromHash, to_hash: toHash, model: this.options.llm.model, summary })
+      .values({ from_hash: fromHash, to_hash: toHash, model: this.cacheModelKey(), summary })
       .onConflict((oc) => oc.doNothing())
       .execute();
+  }
+
+  /** Same model and same prompt, same summary. */
+  private cacheModelKey(): string {
+    return `${this.options.llm.model}@prompt-v${PROMPT_VERSION}`;
   }
 
   /** Updates the job only if we still own it: still pending and not re-claimed since. */

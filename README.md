@@ -121,7 +121,7 @@ Errors are JSON `{ "error": "<code>", "message": "..." }`. `POST /api/competitor
 - `snapshots`: one row per fetch, including unchanged ones, so the timeline is complete. It
   holds the listing fields, a content hash, `changed`, `changed_fields`, a link to the
   previous snapshot, and the summary with its status, attempt count and next attempt time.
-- `summary_cache`: summaries keyed by (previous hash, new hash, model).
+- `summary_cache`: summaries keyed by (previous hash, new hash, model and prompt version).
 
 Migrations live in `server/src/db/migrations` and run with `npm run migrate`. Docker and
 Fly run them automatically.
@@ -191,7 +191,7 @@ The LLM call is deliberately not on the polling path:
    while 400, 401 and 404 fail immediately because retrying won't help. After
    `LLM_MAX_ATTEMPTS` (default 5) the status becomes `failed`.
 5. **Reuse identical transitions.** If the same before/after pair was already summarized
-   with the same model, the cached summary is reused.
+   with the same model and prompt version, the cached summary is reused.
 
 The result is that a slow or failing LLM can delay a summary but never blocks polling,
 never loses a snapshot, and never touches the snapshot's data. An unchanged poll makes no
